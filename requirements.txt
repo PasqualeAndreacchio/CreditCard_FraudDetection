@@ -1,0 +1,14 @@
+# Core
+numpy
+pandas
+matplotlib
+pyyaml
+tqdm
+
+# Deep Learning
+torch
+torchvision
+torchmetrics
+
+
+

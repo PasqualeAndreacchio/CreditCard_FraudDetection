@@ -24,7 +24,7 @@ def main():
     # 1. Load the dataset
     print("[*] Loading creditcard.csv...")
     try:
-        df = pd.read_csv("creditcard.csv")
+        df = pd.read_csv("data/creditcard.csv")
     except FileNotFoundError:
         print("[!] Error: creditcard.csv not found in the current directory.")
         return
