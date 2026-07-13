@@ -9,6 +9,6 @@ tqdm
 torch
 torchvision
 torchmetrics
-
+imblearn
 
 
