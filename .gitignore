@@ -1,5 +1,6 @@
 *data/
 *.venv
+
 *test.ipynb
 __pycache__/
 *.pyc
