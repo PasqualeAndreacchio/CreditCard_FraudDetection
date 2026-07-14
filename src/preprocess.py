@@ -7,28 +7,95 @@ from sklearn.preprocessing import RobustScaler
 
 class Preprocessing:
     """
-    This class is used to preprocess the dataset.
+    Preprocessing pipeline for the Credit Card Fraud Detection dataset.
+ 
+    On instantiation, the dataset is cleaned by removing duplicate rows and
+    rows with missing values. From there, the class exposes methods to obtain
+    a train/test split ready for modeling, in three variants:
+ 
+    - get_dataset(): stratified train/test split with 'Time' and 'Amount'
+      scaled via RobustScaler (fit on the training set only, to avoid data
+      leakage into the test set).
+    - get_smote_dataset(): same as get_dataset(), but with SMOTE oversampling
+      applied to the training set only, to address the strong class
+      imbalance between fraud and non-fraud transactions.
+    - get_class_weights(): computes per-class weights (inversely
+      proportional to class frequency) to use in the training loop instead
+      of oversampling, as an alternative strategy for handling imbalance.
+ 
+    Splits are cached per (test_size, random_state) pair, so calling
+    multiple methods with the same parameters reuses the same split and
+    scaling instead of recomputing them.
     """
 
+
     def __init__(self, df: pd.DataFrame):
-        self.df = df.copy()
-        self._remove_duplicates()
+        
+        # Check of dataset integrity
+        required_cols = {'Class', 'Time', 'Amount'}
+        if not required_cols.issubset(df.columns):
+            raise ValueError(f"DataFrame must contain columns: {required_cols}")
+
+        self.df = self._remove_duplicates(df)
+        # Cache of already-computed splits, keyed by (test_size, random_state)
+        self._split_cache: Dict[Tuple[float, int], Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]] = {}
 
 
-    def _remove_duplicates(self):
+    def get_smote_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
         """
-        This function analyzes the dataset checking for duplicates and removing them.
-        It also check for NULL values and removes them.
+        This function applies SMOTE to the training set to balance the dataset.
+        Args:
+            - test_size (float): The proportion of the dataset to include in the test split.
+            - random_state (int): The seed used by the random number generator.
         Returns:
-            pd.DataFrame: The processed dataset.
+            - X_train_smote, X_test, y_train_smote, y_test
         """
 
-        # Remove duplicates, null values and reset index
-        self.df.drop_duplicates(inplace=True)
-        self.df.dropna(inplace=True)
-        self.df.reset_index(drop=True, inplace=True)
+        # Apply the split with the internal method and SMOTE only the training dataset!
+        X_train, X_test, y_train, y_test = self._split_dataset(test_size=test_size, random_state=random_state)
+        smote = SMOTE(random_state=random_state)
+        X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
-        return self.df
+        return X_train_smote, X_test, y_train_smote, y_test
+    
+
+    def get_class_weights(self, test_size: float = 0.2, random_state: int = 42, verbose: bool = False) -> Dict[int, float]:
+        """
+        This function splits the dataset into training and test sets and calculates the class weights.
+        Args:
+            - test_size (float): The proportion of the dataset to include in the test split.
+            - random_state (int): The seed used by the random number generator.
+            - verbose (bool): An optional parameter, if "True" the function will print the calculated weights
+        Returns:
+            - class_weights (dict): A dictionary containing the classes and the associated weight.
+        """
+
+        # Apply the split with the internal method
+        _, _, y_train, _ = self._split_dataset(test_size=test_size, random_state=random_state)
+        return self._calculate_class_weights(y_train, verbose=verbose)
+
+
+    def get_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        """
+        Returns the preprocessed dataset split into training and test sets, with features already scaled.
+        Duplicates and NULL values are removed automatically at class instantiation.
+        Args:
+            - test_size (float): The proportion of the dataset to include in the test split.
+            - random_state (int): The seed used by the random number generator.
+        Returns:
+            - X_train, X_test, y_train, y_test
+        """
+
+        return self._split_dataset(test_size=test_size, random_state=random_state)
+    
+
+    @staticmethod
+    def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Returns a copy of df with duplicate rows and rows with NULL values
+        removed, and the index reset.
+        """
+        return df.drop_duplicates().dropna().reset_index(drop=True)
 
 
     def _scale_features(self, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -70,37 +137,33 @@ class Preprocessing:
             - random_state (int): The seed used by the random number generator.
         Returns:
             - X_train, X_test, y_train, y_test with the appropriate scalings.
+
+        Note:
+            The result is cached per (test_size, random_state) pair, so repeated calls
+            (e.g. get_dataset + get_class_weights with the same parameters) don't redo
+            the split and scaling from scratch. Copies are still returned, so that any
+            in-place modification by the caller doesn't corrupt the internal cache.
         """
 
-        X = self.df.drop('Class', axis=1)
-        y = self.df['Class']
+        cache_key = (test_size, random_state)
 
-        # Split and scale the datasets
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state, stratify=y
-        )
-        X_train, X_test = self._scale_features(X_train, X_test)
+        if cache_key not in self._split_cache:
+            X = self.df.drop('Class', axis=1)
+            y = self.df['Class']
 
-        return X_train, X_test, y_train, y_test
+            # Split and scale the datasets
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=random_state, stratify=y
+            )
+            X_train, X_test = self._scale_features(X_train, X_test)
 
+            self._split_cache[cache_key] = (X_train, X_test, y_train, y_test)
 
-    def get_smote_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """
-        This function applies SMOTE to the training set to balance the dataset.
-        Args:
-            - test_size (float): The proportion of the dataset to include in the test split.
-            - random_state (int): The seed used by the random number generator.
-        Returns:
-            - X_train_smote, X_test, y_train_smote, y_test
-        """
+        X_train, X_test, y_train, y_test = self._split_cache[cache_key]
 
-        # Apply the split with the internal method and SMOTE only the training dataset!
-        X_train, X_test, y_train, y_test = self._split_dataset(test_size=test_size, random_state=random_state)
-        smote = SMOTE(random_state=random_state)
-        X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+        # Return copies to protect the cache from external in-place modifications
+        return X_train.copy(), X_test.copy(), y_train.copy(), y_test.copy()
 
-        return X_train_smote, X_test, y_train_smote, y_test
-    
     
     @staticmethod
     def _calculate_class_weights(y_train: pd.Series, verbose: bool = False) -> Dict[int, float]:
@@ -136,32 +199,3 @@ class Preprocessing:
             print(f"Class weights: {class_weights}")
 
         return class_weights
-
-
-    def get_class_weights(self, test_size: float = 0.2, random_state: int = 42) -> Dict[int, float]:
-        """
-        This function splits the dataset into training and test sets and calculates the class weights.
-        Args:
-            - test_size (float): The proportion of the dataset to include in the test split.
-            - random_state (int): The seed used by the random number generator.
-        Returns:
-            - class_weights (dict): A dictionary containing the classes and the associated weight.
-        """
-
-        # Apply the split with the internal method
-        _, _, y_train, _ = self._split_dataset(test_size=test_size, random_state=random_state)
-        return self._calculate_class_weights(y_train)
-
-
-    def get_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """
-        Returns the preprocessed dataset split into training and test sets, with features already scaled.
-        Duplicates and NULL values are removed automatically at class instantiation.
-        Args:
-            - test_size (float): The proportion of the dataset to include in the test split.
-            - random_state (int): The seed used by the random number generator.
-        Returns:
-            - X_train, X_test, y_train, y_test
-        """
-
-        return self._split_dataset(test_size=test_size, random_state=random_state)
