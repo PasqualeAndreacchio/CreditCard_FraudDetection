@@ -4,6 +4,7 @@ pandas
 matplotlib
 pyyaml
 tqdm
+scikit-learn
 
 # Deep Learning
 torch

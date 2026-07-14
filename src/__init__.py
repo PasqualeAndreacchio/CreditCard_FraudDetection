@@ -4,6 +4,10 @@ This project aims to detect fraudulent credit card transactions using deep learn
 
 Modules:
     - preprocess.py: Preprocessing utilities for the dataset
+    - models/ffnn_autoencoder.py: Feed-Forward Neural Network Autoencoder
+    - trainer.py: Training pipeline with early stopping and checkpointing
+    - evaluator.py: Anomaly detection evaluation and metrics
+    - utils.py: Configuration loading and utility functions
 """
 
 __authors__ = ["Andreacchio Pasquale", 
