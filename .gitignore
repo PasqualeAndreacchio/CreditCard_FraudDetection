@@ -1,2 +1,4 @@
 *data/
 *.venv
+
+*test.ipynb
