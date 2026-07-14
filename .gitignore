@@ -1,3 +1,8 @@
 *data/
 *.venv
 *test.ipynb
+__pycache__/
+*.pyc
+checkpoints/
+logs/
+plots/ffnn_*
