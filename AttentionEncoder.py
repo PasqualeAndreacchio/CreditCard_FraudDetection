@@ -18,80 +18,11 @@ class InputEmbedding(nn.Module):
 
         return x_embed
 
-class Attention(nn.Module):
-    def __init__(self, d_embed=64, p_drop = 0.1):
-        super().__init__()
-
-        # Latent space dimention
-        self.d_embed = d_embed
-
-        # Defines the matrices for the attention mechanism
-        self.queryw = nn.Linear(d_embed, d_embed)
-        self.keyw = nn.Linear(d_embed, d_embed)
-        self.valuesw = nn.Linear(d_embed, d_embed)
-
-        # Dropout for stability
-        self.dropout = nn.Dropout(p_drop)
-
-    def forward(self, x):
-
-        # Calculates the self attention matrices
-        queries = self.queryw(x)
-        keys = self.keyw(x)
-        values = self.valuesw(x)
-
-        # Calculates scores and weights. 
-        scores = torch.matmul(queries, keys.transpose(-2, -1)) / np.sqrt(self.d_embed)
-        weights = F.softmax(input=scores, dim=-1)
-
-        # Apply dropout 
-        weights = self.dropout(weights)
-
-        representation = torch.matmul(weights, values)
-
-        return representation, weights
-    
-
-class Encoder(nn.Module):
-    def __init__(self, d_embed=64, d_ff=32, dropout=0.1):
-        super().__init__()
-
-        # Attention head
-        self.attention = Attention(d_embed=d_embed, p_drop=dropout)
-        
-        # First layernorm 
-        self.norm1 =  nn.LayerNorm(d_embed)
-        
-        # FFNN 
-        self.feed_forward = nn.Sequential(
-            nn.Linear(d_embed, d_ff),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_ff, d_embed)
-        )
-
-        # Second layernorm 
-        self.norm2 = nn.LayerNorm(d_embed)
-    
-    def forward(self, x):
-
-        attout, att_weights = self.attention(x)
-        norm1out = self.norm1(attout + x)
-        ffnnout = self.feed_forward(norm1out)
-        norm2out = self.norm2(ffnnout + norm1out)
-
-        return norm2out, att_weights
-
-#--------------------------------------------------------------------------
-# Source code for a possible multi attention head
-#--------------------------------------------------------------------------
-
-def scaled_dot_product(q, k, v, mask=None):
+def _scaled_dot_product(q, k, v, mask=None):
     d_k = q.size()[-1]
     # (batch, heads, seq_len, head_dim) @ (batch, heads, head_dim, seq_len) --> (batch, heads, seq_len, seq_len)
     scaled = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(d_k)
-    if mask is not None:
-        scaled += mask
+
     attention = F.softmax(scaled, dim=-1)
     # (batch, heads, seq_len, seq_len) @ (batch, heads, seq_len, head_dim) --> (batch, heads, seq_len, head_dim)
     values = torch.matmul(attention, v)
@@ -112,34 +43,79 @@ class MultiheadAttention(nn.Module):
 
     def forward(self, x, mask=None):
         batch_size, sequence_length, input_dim = x.size()
-        print(f"x.size(): {x.size()}")  # Input shape
 
-        # Step 1: Project x into concatenated q, k, v for ALL heads at once
+        # Project x into concatenated q, k, v for ALL heads at once
         qkv = self.qkv_layer(x)
-        print(f"qkv.size(): {qkv.size()}")  # Shape: (batch, seq_len, 3 * d_model)
 
-        # Step 2: reshape into (batch, seq_len, num_heads, 3 * head_dim)
+        # reshape into (batch, seq_len, num_heads, 3 * head_dim)
         qkv = qkv.reshape(batch_size, sequence_length, self.num_heads, 3 * self.head_dim)
-        print(f"qkv.size(): {qkv.size()}")
 
-        # Step 3: Rearrange to (batch, num_heads, seq_len, 3 * head_dim)
+        # Rearrange to (batch, num_heads, seq_len, 3 * head_dim)
         qkv = qkv.permute(0, 2, 1, 3)
-        print(f"qkv.size(): {qkv.size()}")
 
-        # Step 4: Split the last dimension into q, k, v (each get last dimension of head_dim)
+        # Split the last dimension into q, k, v (each get last dimension of head_dim)
         q, k, v = qkv.chunk(3, dim=-1)  # Each: (batch, num_heads, seq_len, head_dim)
-        print(f"q size: {q.size()}, k size: {k.size()}, v size: {v.size()}")
 
-        # Step 5: Apply scaled dot product attention to get outputs (contextualized values) and attention weights
-        values, attention = scaled_dot_product(q, k, v, mask)
-        print(f"values.size(): {values.size()}, attention.size: {attention.size()}")
+        # Apply scaled dot product attention to get outputs (contextualized values) and attention weights
+        values, attention = _scaled_dot_product(q, k, v, mask)
 
-        # Step 6: Merge the heads (permute before reshape)
+        # Merge the heads (permute before reshape)
         values = values.permute(0, 2, 1, 3)   # (batch, seq_len, heads, head_dim)
         values = values.reshape(batch_size, sequence_length, self.num_heads * self.head_dim)
-        print(f"values.size(): {values.size()}")
 
-        # Step 7: Final linear projection to match d_model
+        # Final linear projection to match d_model
         out = self.linear_layer(values)
-        print(f"out.size(): {out.size()}")
+
         return out
+
+class Encoder(nn.Module):
+    def __init__(self, d_embed=128, d_ff=64, num_heads=4, dropout=0.1):
+        super().__init__()
+
+        # Attention head
+        self.attention = MultiheadAttention(d_embed, d_embed, num_heads)
+        
+        # First layernorm 
+        self.norm1 =  nn.LayerNorm(d_embed)
+        
+        # FFNN 
+        self.feed_forward = nn.Sequential(
+            nn.Linear(d_embed, d_ff),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_ff, d_embed)
+        )
+
+        # Second layernorm 
+        self.norm2 = nn.LayerNorm(d_embed)
+    
+    def forward(self, x):
+
+        attout = self.attention(x)
+        norm1out = self.norm1(attout + x)
+        ffnnout = self.feed_forward(norm1out)
+        norm2out = self.norm2(ffnnout + norm1out)
+
+        return norm2out #, att_weights (Batch, nfeatutes, d_model)
+
+
+class Classifier(nn.Module):
+    def __init__(self, d_embed, dropout=0.1):
+        super().__init__()
+
+        self.classifier = nn.Sequential(
+            nn.Linear(d_embed, d_embed // 2),
+            nn.BatchNorm1d(d_embed // 2),
+            nn.ReLU(), 
+            nn.Dropout(dropout),
+            nn.Linear(d_embed // 2, 1)
+        )
+
+    def forward(self, x):
+        
+        # x shape = (Batch, features, d_embed)
+        pooled = x.mean(dim=1) # shape (Batch, d_embed) 
+        out = self.classifier(pooled) # shape (Batch, 1)
+
+        return out 
+        
