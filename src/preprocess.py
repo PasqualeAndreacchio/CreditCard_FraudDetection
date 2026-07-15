@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional, overload
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
@@ -8,86 +8,153 @@ from sklearn.preprocessing import RobustScaler
 class Preprocessing:
     """
     Preprocessing pipeline for the Credit Card Fraud Detection dataset.
- 
+
     On instantiation, the dataset is cleaned by removing duplicate rows and
     rows with missing values. From there, the class exposes methods to obtain
-    a train/test split ready for modeling, in three variants:
- 
-    - get_dataset(): stratified train/test split with 'Time' and 'Amount'
-      scaled via RobustScaler (fit on the training set only, to avoid data
-      leakage into the test set).
-    - get_smote_dataset(): same as get_dataset(), but with SMOTE oversampling
-      applied to the training set only, to address the strong class
-      imbalance between fraud and non-fraud transactions.
-    - get_class_weights(): computes per-class weights (inversely
-      proportional to class frequency) to use in the training loop instead
-      of oversampling, as an alternative strategy for handling imbalance.
- 
-    Splits are cached per (test_size, random_state) pair, so calling
-    multiple methods with the same parameters reuses the same split and
-    scaling instead of recomputing them.
+    a train/test split (optionally train/val/test) ready for modeling, in
+    three variants:
+
+    - get_dataset(): stratified split with 'Time' and 'Amount' scaled via
+      RobustScaler (fit on the training set only, to avoid data leakage into
+      val/test). By default this returns a train/test split
+      (X_train, X_test, y_train, y_test). Passing val_size adds a third,
+      held-out validation set, returning (X_train, X_val, X_test,
+      y_train, y_val, y_test) instead. Stratification is applied at both
+      split points, so class proportions are preserved across all sets.
+
+    - get_smote_dataset(): same splitting/scaling behavior as get_dataset()
+      (including the optional val_size), but with SMOTE oversampling applied
+      to the training set only, to address the strong class imbalance
+      between fraud and non-fraud transactions. Validation and test sets are
+      left untouched, since they must reflect the real class distribution.
+
+    - get_class_weights(): alternative to SMOTE. Computes per-class weights
+      (inversely proportional to class frequency) from the training labels
+      only, to use in the training loop instead of oversampling. Also
+      respects val_size when splitting, though the validation set itself
+      plays no role in the weight calculation.
+
+    Splits are cached per (test_size, val_size, random_state) pair, so
+    calling multiple methods with the same parameters reuses the same split
+    and scaling instead of recomputing them. Callers always receive copies,
+    so in-place modification of the returned DataFrames/Series never
+    corrupts the cache.
     """
 
-
     def __init__(self, df: pd.DataFrame):
-        
         # Check of dataset integrity
         required_cols = {'Class', 'Time', 'Amount'}
         if not required_cols.issubset(df.columns):
             raise ValueError(f"DataFrame must contain columns: {required_cols}")
 
         self.df = self._remove_duplicates(df)
-        # Cache of already-computed splits, keyed by (test_size, random_state)
-        self._split_cache: Dict[Tuple[float, int], Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]] = {}
+        # Cache of already-computed splits, keyed by (test_size, val_size, random_state)
+        self._split_cache: Dict[Tuple[float, Optional[float], int], Tuple] = {}
 
 
-    def get_smote_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """
-        This function applies SMOTE to the training set to balance the dataset.
-        Args:
-            - test_size (float): The proportion of the dataset to include in the test split.
-            - random_state (int): The seed used by the random number generator.
-        Returns:
-            - X_train_smote, X_test, y_train_smote, y_test
-        """
+    @overload
+    def get_dataset(
+        self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]: ...
 
-        # Apply the split with the internal method and SMOTE only the training dataset!
-        X_train, X_test, y_train, y_test = self._split_dataset(test_size=test_size, random_state=random_state)
-        smote = SMOTE(random_state=random_state)
-        X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+    @overload
+    def get_dataset(
+        self, test_size: float, val_size: float, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]: ...
 
-        return X_train_smote, X_test, y_train_smote, y_test
-    
-
-    def get_class_weights(self, test_size: float = 0.2, random_state: int = 42, verbose: bool = False) -> Dict[int, float]:
-        """
-        This function splits the dataset into training and test sets and calculates the class weights.
-        Args:
-            - test_size (float): The proportion of the dataset to include in the test split.
-            - random_state (int): The seed used by the random number generator.
-            - verbose (bool): An optional parameter, if "True" the function will print the calculated weights
-        Returns:
-            - class_weights (dict): A dictionary containing the classes and the associated weight.
-        """
-
-        # Apply the split with the internal method
-        _, _, y_train, _ = self._split_dataset(test_size=test_size, random_state=random_state)
-        return self._calculate_class_weights(y_train, verbose=verbose)
-
-
-    def get_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    def get_dataset(
+        self, 
+        test_size: float = 0.2, 
+        val_size: Optional[float] = None, 
+        random_state: int = 42
+    ) -> Tuple:
         """
         Returns the preprocessed dataset split into training and test sets, with features already scaled.
         Duplicates and NULL values are removed automatically at class instantiation.
         Args:
             - test_size (float): The proportion of the dataset to include in the test split.
+            - val_size (float, optional): The proportion of the dataset to include in the validation split.
+                                          If None (default), only a train/test split is retreived.
             - random_state (int): The seed used by the random number generator.
         Returns:
-            - X_train, X_test, y_train, y_test
+            - If val_size is None: X_train, X_test, y_train, y_test
+            - If val_size is given: X_train, X_val, X_test, y_train, y_val, y_test
         """
 
-        return self._split_dataset(test_size=test_size, random_state=random_state)
+        return self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
     
+
+    @overload
+    def get_smote_dataset(
+        self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]: ...
+
+    @overload
+    def get_smote_dataset(
+        self, test_size: float, val_size: float, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]: ...
+
+    def get_smote_dataset(
+        self,
+        test_size: float = 0.2,
+        val_size: Optional[float] = None,
+        random_state: int = 42,
+    ) -> Tuple:
+        """
+        This function applies SMOTE to the training set to balance the dataset.
+        val and test sets are left untouched (they must reflect the real class distribution).
+        Args:
+            - test_size (float): The proportion of the dataset to include in the test split.
+            - val_size (float, optional): The proportion of the dataset to include in the validation split.
+                                          If None (default), only a train/test split is returned.
+            - random_state (int): The seed used by the random number generator.
+        Returns:
+            - If val_size is None: X_train_smote, X_test, y_train_smote, y_test
+            - If val_size is given: X_train_smote, X_val, X_test, y_train_smote, y_val, y_test
+        """
+        split = self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
+        smote = SMOTE(random_state=random_state)
+
+        if not val_size:
+            X_train, X_test, y_train, y_test = split
+            X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+            return X_train_smote, X_test, y_train_smote, y_test
+        else:
+            X_train, X_val, X_test, y_train, y_val, y_test = split
+            X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
+            return X_train_smote, X_val, X_test, y_train_smote, y_val, y_test    
+
+
+    def get_class_weights(
+        self,
+        test_size: float = 0.2,
+        val_size: Optional[float] = None,
+        random_state: int = 42,
+        verbose: bool = False,
+    ) -> Dict[int, float]:
+        """
+        Splits the dataset (train/test or train/val/test) and calculates
+        class weights from the training labels only.
+        Args:
+            - test_size (float): The proportion of the dataset to include in the test split.
+            - val_size (float, optional): The proportion of the dataset to include in the validation split.
+            - random_state (int): The seed used by the random number generator.
+            - verbose (bool): If True, print the calculated weights.
+        Returns:
+            - class_weights (dict): A dictionary containing the classes and the associated weight.
+        Note:
+            Class weights and SMOTE are alternative strategies for handling
+            imbalance, not meant to be combined. This method always computes
+            weights from the original (non-resampled) training labels for the
+            given (test_size, val_size, random_state) — even if get_smote_dataset()
+            was previously called with the same parameters. It does NOT reflect
+            the balanced distribution produced by SMOTE.
+        """
+        split = self._split_dataset(test_size=test_size, val_size=val_size, random_state=random_state)
+        # y_train sits at index 2 for a 4-tuple split, index 3 for a 6-tuple split
+        y_train = split[2] if not val_size else split[3]
+        return self._calculate_class_weights(y_train, verbose=verbose)    
+
 
     @staticmethod
     def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
@@ -97,72 +164,117 @@ class Preprocessing:
         """
         return df.drop_duplicates().dropna().reset_index(drop=True)
 
-
-    def _scale_features(self, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    
+    def _scale_features(self, X_train: pd.DataFrame, *X_others: pd.DataFrame) -> Tuple[pd.DataFrame, ...]:
         """
         Scales the 'Time' and 'Amount' features using RobustScaler.
-        The scaler is fitted strictly on the training set to prevent data leakage.            
+        The scaler is fitted strictly on the training set to prevent data
+        leakage, then applied to any number of other sets (val, test, ...).
         Args:
             X_train (pd.DataFrame): The training set.
-            X_test (pd.DataFrame): The testing set.
+            *X_others (pd.DataFrame): Any number of additional sets (e.g. X_val, X_test)
+              to transform with the scaler fitted on X_train.
         Returns:
-            Tuple[pd.DataFrame, pd.DataFrame]: The scaled training and testing sets.
+            Tuple[pd.DataFrame, ...]: (X_train, *X_others), all scaled, in the same order given.
         """
-
-        # Create copies of the dataframe to avoid pandas warning
+        # Make copies to prevent pandas warnings about modifying copies vs views
         X_train = X_train.copy()
-        X_test = X_test.copy()
+        others = [X.copy() for X in X_others]
 
-        # Create the scaler
         rob_scaler_amount = RobustScaler()
         rob_scaler_time = RobustScaler()
 
-        # Fit and transform the training data
+        # Fit and transform on the training set only, then transform the other datasets
         X_train['Amount'] = rob_scaler_amount.fit_transform(X_train[['Amount']])
         X_train['Time'] = rob_scaler_time.fit_transform(X_train[['Time']])
 
-        # Transform the testing data using the fitted scalers
-        X_test['Amount'] = rob_scaler_amount.transform(X_test[['Amount']])
-        X_test['Time'] = rob_scaler_time.transform(X_test[['Time']])
+        for X in others:
+            X['Amount'] = rob_scaler_amount.transform(X[['Amount']])
+            X['Time'] = rob_scaler_time.transform(X[['Time']])
 
-        return X_train, X_test
+        return (X_train, *others)
 
 
-    def _split_dataset(self, test_size: float = 0.2, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    @overload
+    def _split_dataset(
+        self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]: ...
+
+    @overload
+    def _split_dataset(
+        self, test_size: float, val_size: float, random_state: int = 42
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]: ...
+
+    def _split_dataset(
+        self, 
+        test_size: float = 0.2,
+        val_size: Optional[float] = None,
+        random_state: int = 42
+    ) -> Tuple:
         """
         This function splits the dataset into training and test sets using stratified split to make
         sure that fraud and non-fraud transactions are represented proportionally in both sets.
         Args:
+            - val_size (float): The proportion of the dataset to include in the validation split.
+                                If None (default), only a train/test split is retreived.
             - test_size (float): The proportion of the dataset to include in the test split.
             - random_state (int): The seed used by the random number generator.
         Returns:
-            - X_train, X_test, y_train, y_test with the appropriate scalings.
+            - If val_size is None: X_train, X_test, y_train, y_test with the appropriate scalings.
+            - If val_size is given: X_train, X_val, X_test, y_train, y_val, y_test with the appropriate scalings.
 
         Note:
-            The result is cached per (test_size, random_state) pair, so repeated calls
+            The result is cached per (test_size, val_size, random_state) pair, so repeated calls
             (e.g. get_dataset + get_class_weights with the same parameters) don't redo
             the split and scaling from scratch. Copies are still returned, so that any
             in-place modification by the caller doesn't corrupt the internal cache.
         """
 
-        cache_key = (test_size, random_state)
+        # Treating val_size = 0 as val_size = None (no validation set)
+        if val_size == 0: val_size = None
+
+        # Sanity checks: test_size and val_size must be within (0, 1)
+        # and their sum (including val if present) must be less than 1.
+        if not (0 < test_size < 1):
+            raise ValueError(f"test_size must be in (0, 1), got {test_size}.")
+        if val_size is not None:
+            if not (0 < val_size < 1):
+                raise ValueError(f"val_size must be in (0, 1), got {val_size}.")
+            if val_size + test_size >= 1:
+                raise ValueError(
+                    f"val_size + test_size must be < 1, got {val_size + test_size:.4f}."
+                )
+
+        cache_key = (test_size, val_size, random_state)
 
         if cache_key not in self._split_cache:
             X = self.df.drop('Class', axis=1)
             y = self.df['Class']
 
-            # Split and scale the datasets
-            X_train, X_test, y_train, y_test = train_test_split(
+            # First, split the dataset into trainval + test sets
+            X_trainval, X_test, y_trainval, y_test = train_test_split(
                 X, y, test_size=test_size, random_state=random_state, stratify=y
             )
-            X_train, X_test = self._scale_features(X_train, X_test)
 
-            self._split_cache[cache_key] = (X_train, X_test, y_train, y_test)
+            if val_size is None:
+                X_train, X_test = self._scale_features(X_trainval, X_test)
+                self._split_cache[cache_key] = (X_train, X_test, y_trainval, y_test)
+            else:
+                # Since val_size is relative to the whole dataset, we have to convert it to be 
+                # relative to the training set, which has a size of (1 - test_size)
+                relative_val = val_size / (1 - test_size)
 
-        X_train, X_test, y_train, y_test = self._split_cache[cache_key]
+                # Split the training set into training and validation sets
+                X_train, X_val, y_train, y_val = train_test_split(
+                    X_trainval, y_trainval, test_size=relative_val, random_state=random_state, stratify=y_trainval
+                )
+
+                # Scale the features and save in the cache 
+                X_train, X_val, X_test = self._scale_features(X_train, X_val, X_test)
+                self._split_cache[cache_key] = (X_train, X_val, X_test, y_train, y_val, y_test)
 
         # Return copies to protect the cache from external in-place modifications
-        return X_train.copy(), X_test.copy(), y_train.copy(), y_test.copy()
+        return tuple(item.copy() for item in self._split_cache[cache_key])
 
     
     @staticmethod
@@ -184,6 +296,12 @@ class Preprocessing:
         total_transactions = len(y_train)
         fraud_count = int(y_train.sum())
         non_fraud_count = total_transactions - fraud_count
+
+        # Sanity checks
+        if fraud_count == 0:
+            raise ValueError("There are no fraud transactions in the training set.")
+        if non_fraud_count == 0:
+            raise ValueError("There are no non-fraud transactions in the training set.")
 
         # Calculate the weights
         fraud_weight = total_transactions / (2. * fraud_count)
