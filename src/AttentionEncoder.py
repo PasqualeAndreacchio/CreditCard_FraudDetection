@@ -118,4 +118,20 @@ class Classifier(nn.Module):
         out = self.classifier(pooled) # shape (Batch, 1)
 
         return out 
+
+class CreditCardFraudDetector(nn.Module):
+    def __init__(self, encoder, classifier, d_embed):
+        super().__init__()
         
+        
+        self.embedder = InputEmbedding(d_embed)
+        self.encoder = encoder
+        self.classifier = classifier
+
+    def forward(self, x):
+        
+        x = self.embedder(x)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        
+        return x
