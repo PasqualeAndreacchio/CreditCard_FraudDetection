@@ -8,5 +8,5 @@ checkpoints/
 logs/
 plots/ffnn_*
 *.pth
-weights
+results
 *references/

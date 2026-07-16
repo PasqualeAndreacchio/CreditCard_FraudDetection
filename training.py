@@ -9,7 +9,7 @@ from src.preprocess import Preprocessing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import yaml
-
+import json
 
 # ----------------------------------------------------------
 # CONFIGURATION FILE
@@ -76,3 +76,9 @@ trainer = Trainer(model=detector, config=config)
 # ---------------------------------------------------------- 
 
 results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
+
+
+# After trainer.fit() finishes...
+print("Saving training history...")
+with open("training_history.json", "w") as f:
+    json.dump(results, f, indent=4)
