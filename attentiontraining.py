@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
-from src.models.Model import EncoderConfig, DecoderConfig, Complete_Autoencoder
+from src.models.Model import Complete_Autoencoder
 from src.trainer import Trainer
 from src.preprocess import Preprocessing
 import matplotlib.pyplot as plt
@@ -58,19 +58,8 @@ test_loader = DataLoader(
 with open("configs/config.yaml", "r") as file:
     config = yaml.safe_load(file)
 
-model_cfg = config.get("model")
+# Model configuration and definition
+detector = Complete_Autoencoder(config=config)
 
-detector = Complete_Autoencoder(model_cfg=model_cfg)
-
-
-
-
-"""
-# 2. Pass the model section directly to your factory method
-model_config = config["model"]
-autoencoder = FFNNAutoencoder.from_config(model_config)
-
-# Print the summary to verify
-print(autoencoder.summary())
-
-"""
+# Training configuration and definition
+trainer = Trainer(model=detector, config=config)

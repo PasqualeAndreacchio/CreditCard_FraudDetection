@@ -113,11 +113,11 @@ class Trainer:
         self,
         model: Complete_Autoencoder,
         config: dict[str, Any],
-        device: torch.device,
     ) -> None:
-        self.model = model.to(device)
+        
         self.config = config
-        self.device = device
+        self.device = config.get("device")
+        self.model = model.to(self.device)
 
         training_cfg = config["training"]
 

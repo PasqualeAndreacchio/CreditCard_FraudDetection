@@ -37,12 +37,12 @@ class Complete_Autoencoder(nn.Module):
 
     def __init__(
         self,
-        model_cfg: dict = None,
+        config: dict = None,
     ) -> None:
         super().__init__()
 
         # Safely handle if model_cfg is None
-        model_cfg = model_cfg or {}
+        model_cfg = config.get("model") or {}
 
         # Use .get() to avoid KeyErrors if the keys are missing
         encoder_config = model_cfg.get('encoder')
