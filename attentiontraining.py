@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
-from src.AttentionEncoder import Encoder, Classifier, CreditCardFraudDetector
+from src.models.complete_autoencoder import EncoderConfig, DecoderConfig, Complete_Autoencoder
 from src.preprocess import Preprocessing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -29,17 +29,25 @@ train_loader = DataLoader(
 )
 
 # Define the model
+<<<<<<< HEAD
 d_embed = 32
 encoder = Encoder(d_embed=d_embed, d_ff=16, num_heads=4)
 classifier = Classifier(d_embed=d_embed, dropout=0.1)
 detector = CreditCardFraudDetector(encoder, classifier, d_embed)
+=======
+d_embed = 48
+encoder_config = EncoderConfig(d_embed=d_embed, d_ff=32, num_heads=4, dropout=0.1)
+decoder_config = DecoderConfig(latent_dim=48, output_dim=1)
+
+detector = Complete_Autoencoder(encoder_config, decoder_config)
+>>>>>>> complete_model
 
 #--------------------------------------------------------------------
 # TRAINING PROCESS
 #--------------------------------------------------------------------
 
 # Global variables
-epochs = 50
+epochs = 25
 losses = []
 
 # loss and optimizer
@@ -82,5 +90,5 @@ plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig("training_loss.png")
+plt.savefig("training_loss_complete_model.png")
 
