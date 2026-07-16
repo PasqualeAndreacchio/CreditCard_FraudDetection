@@ -5,6 +5,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class InputEmbedding(nn.Module):
+
+    """ 
+    This class takes the data coming from the dataset, already preprocessed and transformes
+    their dimentions. The incoming data have shape (batch, features), but the attention process
+    needs the shape (batch, seq_length, embedding_dim). The forward pass adds the third dimention
+    (d_embed) and makes the seq_length correspond to features. 
+
+    Input shape (batch, features) --> output shape (batch, features, d_embed)
+    """
+
     def __init__(self, d_embed):
         super().__init__()
 
@@ -69,7 +79,7 @@ class MultiheadAttention(nn.Module):
         return out
 
 class Encoder(nn.Module):
-    def __init__(self, d_embed=128, d_ff=64, num_heads=4, dropout=0.1):
+    def __init__(self, d_embed=32, d_ff=16, num_heads=4, dropout=0.1):
         super().__init__()
 
         # Attention head

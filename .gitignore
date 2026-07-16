@@ -7,3 +7,5 @@
 checkpoints/
 logs/
 plots/ffnn_*
+*.pth
+*references/

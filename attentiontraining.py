@@ -29,8 +29,8 @@ train_loader = DataLoader(
 )
 
 # Define the model
-d_embed = 128
-encoder = Encoder(d_embed=d_embed, d_ff=64, num_heads=4)
+d_embed = 32
+encoder = Encoder(d_embed=d_embed, d_ff=16, num_heads=4)
 classifier = Classifier(d_embed=d_embed, dropout=0.1)
 detector = CreditCardFraudDetector(encoder, classifier, d_embed)
 
@@ -67,6 +67,12 @@ for i in range(epochs):
     print("epoch loss: ", epoch_loss)
     losses.append(epoch_loss)
 
+# Save the network weights
+
+torch.save(detector.state_dict(), "detector_weights.pth")
+
+# Losses plot 
+
 plt.figure(figsize=(10, 5))
 # Use .plot instead of .scatter for a smooth line
 plt.plot(losses, label="Epoch Loss", color="royalblue", alpha=0.7) 
@@ -77,3 +83,4 @@ plt.ylabel("Loss")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
 plt.savefig("training_loss.png")
+
