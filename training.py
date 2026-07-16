@@ -76,12 +76,3 @@ trainer = Trainer(model=detector, config=config)
 # ---------------------------------------------------------- 
 
 results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
-
-
-# ----------------------------------------------------------
-# SAVES THE WEIGHTS OF THE MODEL
-# ---------------------------------------------------------- 
-
-WEIGHT_FILE = "weights/first_detector_run.pth"
-
-torch.save(detector.state_dict(), WEIGHT_FILE)
