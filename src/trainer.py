@@ -336,14 +336,7 @@ class Trainer:
         return running_loss / max(n_batches, 1)
 
     def _validate_epoch(self, loader: DataLoader) -> float:
-        """Run a single validation epoch (no gradients).
-
-        Args:
-            loader: Validation DataLoader.
-
-        Returns:
-            Average validation loss.
-        """
+        """Run a single validation epoch (no gradients)."""
         self.model.eval()
         running_loss = 0.0
         n_batches = 0
@@ -352,13 +345,28 @@ class Trainer:
             for batch in loader:
                 if isinstance(batch, (list, tuple)):
                     x = batch[0]
-                    y = batch[1]
                 else:
                     x = batch
 
                 x = x.to(self.device)
-                x_hat = self.model(x)
-                loss = self.criterion(x_hat, y)
+                
+                if self.task == "classification":
+                    y = batch[1]
+                    y = y.to(self.device)
+                    y_pred = self.model(x)
+                    
+                    # Same shape alignment as in training!
+                    y = y
+                    
+                    loss = self.criterion(y_pred, y)
+                    
+                elif self.task == "reconstruction":
+                    x_hat = self.model(x)
+                    # Compare output to original input
+                    loss = self.criterion(x_hat, x)
+                    
+                else:
+                    raise ValueError(f"The task '{self.task}' is not implemented")
 
                 running_loss += loss.item()
                 n_batches += 1
