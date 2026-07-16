@@ -10,9 +10,9 @@ class Preprocessing:
     Preprocessing pipeline for the Credit Card Fraud Detection dataset.
 
     On instantiation, the dataset is cleaned by removing duplicate rows and
-    rows with missing values. From there, the class exposes methods to obtain
-    a train/test split (optionally train/val/test) ready for modeling, in
-    three variants:
+    rows with missing values with the possibility of dropping the "Time" column.
+    From there, the class exposes methods to obtain a train/test split 
+    (optionally train/val/test) ready for modeling, in three variants:
 
     - get_dataset(): stratified split with 'Time' and 'Amount' scaled via
       RobustScaler (fit on the training set only, to avoid data leakage into
@@ -41,13 +41,22 @@ class Preprocessing:
     corrupts the cache.
     """
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, drop_time: bool = False):
+        """
+        Constructor of the Preprocessing class.
+        Args:
+            - df (pd.DataFrame): The dataset to be processed.
+            - drop_time (bool): Whether to drop the 'Time' column (default=False).
+        """
         # Check of dataset integrity
         required_cols = {'Class', 'Time', 'Amount'}
         if not required_cols.issubset(df.columns):
             raise ValueError(f"DataFrame must contain columns: {required_cols}")
 
+        # Remove time (if specified) and duplicates/NaN
+        if drop_time: df = df.drop('Time', axis=1)
         self.df = self._remove_duplicates(df)
+        
         # Cache of already-computed splits, keyed by (test_size, val_size, random_state)
         self._split_cache: Dict[Tuple[float, Optional[float], int], Tuple] = {}
 
@@ -167,7 +176,7 @@ class Preprocessing:
     
     def _scale_features(self, X_train: pd.DataFrame, *X_others: pd.DataFrame) -> Tuple[pd.DataFrame, ...]:
         """
-        Scales the 'Time' and 'Amount' features using RobustScaler.
+        Scales 'Amount' feature (and 'Time' if present) using RobustScaler.
         The scaler is fitted strictly on the training set to prevent data
         leakage, then applied to any number of other sets (val, test, ...).
         Args:
@@ -182,16 +191,18 @@ class Preprocessing:
         others = [X.copy() for X in X_others]
 
         rob_scaler_amount = RobustScaler()
-        rob_scaler_time = RobustScaler()
-
         # Fit and transform on the training set only, then transform the other datasets
         X_train['Amount'] = rob_scaler_amount.fit_transform(X_train[['Amount']])
-        X_train['Time'] = rob_scaler_time.fit_transform(X_train[['Time']])
-
         for X in others:
             X['Amount'] = rob_scaler_amount.transform(X[['Amount']])
-            X['Time'] = rob_scaler_time.transform(X[['Time']])
-
+        
+        # If "Time" column is present, scale it too (always)
+        if 'Time' in X_train.columns:
+            rob_scaler_time = RobustScaler()
+            X_train['Time'] = rob_scaler_time.fit_transform(X_train[['Time']])
+            for X in others:
+                if 'Time' in X.columns:
+                    X['Time'] = rob_scaler_time.transform(X[['Time']])
         return (X_train, *others)
 
 
