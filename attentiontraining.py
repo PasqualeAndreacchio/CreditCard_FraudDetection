@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
-from src.AttentionEncoder import Encoder, Classifier, CreditCardFraudDetector
+from src.models.AttentionEncoder import Encoder, Classifier, CreditCardFraudDetector
 from src.preprocess import Preprocessing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
