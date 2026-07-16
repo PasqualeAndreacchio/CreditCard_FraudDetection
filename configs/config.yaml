@@ -21,11 +21,17 @@ model:
     activation: "relu"
     dropout: 0.1
     batch_norm: True
+  task: "classification"           # "classification" or "reconstruction"
+
+# ─── DataLoaders ───────────────────────────────────────────────────────────────
+batch_size: 256                    # Mini-batch size
+test_size: 0.2                     # fraction of samples for the test set
+val_size: 0                        # fraction of samples for the validation set
+
 
 # ─── Training ───────────────────────────────────────────────────────────────
 training:
   epochs: 100                        # Maximum number of training epochs
-  batch_size: 256                    # Mini-batch size
   learning_rate: 0.001               # Initial learning rate
   weight_decay: 0.0001               # L2 regularization (AdamW)
   optimizer: "adam"                   # Optimizer: adam | adamw | sgd

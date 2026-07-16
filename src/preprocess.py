@@ -132,8 +132,8 @@ class Preprocessing:
             # Add .to_numpy() to the Pandas objects
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
 
             return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor, y_test_tensor
         else:
@@ -143,12 +143,10 @@ class Preprocessing:
             # Add .to_numpy() to the Pandas objects
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
             X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-            
-            # Note: you also had a typo here in your original code (data= instead of dtype=)
-            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32) 
+            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(-1)
 
             return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor, y_test_tensor, y_val_tensor
 

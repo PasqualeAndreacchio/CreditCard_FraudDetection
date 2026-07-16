@@ -12,6 +12,16 @@ import yaml
 
 
 # ----------------------------------------------------------
+# CONFIGURATION FILE
+# ---------------------------------------------------------- 
+
+
+# Read configuration file
+with open("configs/config.yaml", "r") as file:
+    config = yaml.safe_load(file)
+
+
+# ----------------------------------------------------------
 # DATASET LOADING AND PREPROCESSING
 # ---------------------------------------------------------- 
 
@@ -21,7 +31,7 @@ rawdata = pd.read_csv("data/creditcard.csv")
 
 # Preprocess
 preprocess = Preprocessing(rawdata)
-Xtrain_smote, Xtest, Ytrain_smote, Ytest = preprocess.get_smote_dataset(test_size=0.2)
+Xtrain_smote, Xtest, Ytrain_smote, Ytest = preprocess.get_smote_dataset(test_size=config.get("test_size"))
 
 # Transform the dataset into the right data type and format
 train_dataset = TensorDataset(Xtrain_smote, Ytrain_smote)
@@ -34,7 +44,7 @@ test_dataset = TensorDataset(Xtest, Ytest)
 
 
 # Define train and test dataloaders
-batch_size = 64
+batch_size = config.get("batch_size")
 
 train_loader = DataLoader(
     dataset=train_dataset, 
@@ -54,12 +64,24 @@ test_loader = DataLoader(
 # ---------------------------------------------------------- 
 
 
-# Read configuration file
-with open("configs/config.yaml", "r") as file:
-    config = yaml.safe_load(file)
-
 # Model configuration and definition
 detector = Complete_Autoencoder(config=config)
 
 # Training configuration and definition
 trainer = Trainer(model=detector, config=config)
+
+
+# ----------------------------------------------------------
+# TRAINING PHASE 
+# ---------------------------------------------------------- 
+
+results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
+
+
+# ----------------------------------------------------------
+# SAVES THE WEIGHTS OF THE MODEL
+# ---------------------------------------------------------- 
+
+WEIGHT_FILE = "weights/first_detector_run.pth"
+
+torch.save(detector.state_dict(), WEIGHT_FILE)

@@ -121,6 +121,9 @@ class Trainer:
 
         training_cfg = config["training"]
 
+        # Task
+        self.task = config['model']['task']
+
         # Loss
         self.criterion = _build_loss(training_cfg["loss"])
 
@@ -311,8 +314,18 @@ class Trainer:
             x = x.to(self.device)
 
             self.optimizer.zero_grad()
-            x_hat = self.model(x)
-            loss = self.criterion(x_hat, x)
+            
+            if self.task == "classification":
+                y = batch[1]
+                y = y.to(self.device)
+                y_pred = self.model(x)
+                loss = self.criterion(y_pred, y)
+            elif self.task == "recostruction":
+                x_hat = self.model(x)
+                loss = self.criterion(x_hat, x)
+            else:
+                raise ValueError(f"The task {self.task} is not implemented")
+
             loss.backward()
             self.optimizer.step()
 
@@ -339,12 +352,13 @@ class Trainer:
             for batch in loader:
                 if isinstance(batch, (list, tuple)):
                     x = batch[0]
+                    y = batch[1]
                 else:
                     x = batch
 
                 x = x.to(self.device)
                 x_hat = self.model(x)
-                loss = self.criterion(x_hat, x)
+                loss = self.criterion(x_hat, y)
 
                 running_loss += loss.item()
                 n_batches += 1
