@@ -5,6 +5,7 @@ matplotlib
 pyyaml
 tqdm
 scikit-learn
+pydantic
 
 # Deep Learning
 torch

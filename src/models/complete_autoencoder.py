@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from pydantic import BaseModel
-from AttentionEncoder import Encoder, InputEmbedding
-from ffnn_autoencoder import Decoder
+from .AttentionEncoder import Encoder, InputEmbedding
+from .ffnn_autoencoder import Decoder
 
 # Use BaseModel for better readability and "runtime sanity check"
 # If an attribute is missing or of the wrong type, BaseModel will raise an error
