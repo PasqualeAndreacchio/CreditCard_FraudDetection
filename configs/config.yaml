@@ -10,13 +10,13 @@
 # ─── Model Architecture ─────────────────────────────────────────────────────
 model:
   encoder:
-    d_embed: 32            
-    d_ff: 16
+    d_embed: 64            
+    d_ff: 32
     num_heads: 2
     dropout: 0.1
   decoder:
-    latent_dim: 32
-    hidden_layers: [16, 8, 4]
+    latent_dim: 64
+    hidden_layers: [32, 16, 8]
     output_dim: 1
     activation: "relu"
     dropout: 0.1
@@ -43,7 +43,7 @@ training:
   early_stopping:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
-    min_delta: 0.0001                # Minimum improvement to count as progress
+    min_delta: 0.00001                # Minimum improvement to count as progress
   loss: "bce"                        # Reconstruction loss: mse | mae | huber | bce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────

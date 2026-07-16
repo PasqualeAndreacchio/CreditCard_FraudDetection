@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from src.models.Model import Complete_Autoencoder
-from src.trainer import Trainer
-from src.preprocess import Preprocessing
+from src.Train.trainer import Trainer
+from src.Datasets.preprocess import Preprocessing
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import yaml
@@ -80,5 +80,5 @@ results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
 
 # After trainer.fit() finishes...
 print("Saving training history...")
-with open("training_history.json", "w") as f:
+with open("training_history_1.json", "w") as f:
     json.dump(results, f, indent=4)
