@@ -24,7 +24,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.utils import load_config, set_seed, get_device, setup_logging
-from src.models.ffnn_autoencoder import FFNNAutoencoder
+from src.models.FFNNDecoder import FFNNAutoencoder
 from src.trainer import Trainer
 
 logger = logging.getLogger(__name__)

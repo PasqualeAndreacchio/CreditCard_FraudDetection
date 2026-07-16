@@ -5,6 +5,6 @@ Available models:
     - FFNNAutoencoder: Feed-Forward Neural Network Autoencoder for anomaly detection.
 """
 
-from src.models.ffnn_autoencoder import FFNNAutoencoder
+from src.models.FFNNDecoder import FFNNAutoencoder
 
 __all__ = ["FFNNAutoencoder"]

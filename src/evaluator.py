@@ -32,7 +32,7 @@ from sklearn.metrics import (
 
 import matplotlib.pyplot as plt
 
-from src.models.ffnn_autoencoder import FFNNAutoencoder
+from src.models.FFNNDecoder import FFNNAutoencoder
 
 logger = logging.getLogger(__name__)
 

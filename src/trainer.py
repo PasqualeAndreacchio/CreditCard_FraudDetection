@@ -1,5 +1,5 @@
 """
-Training pipeline for the FFNN Autoencoder.
+Training pipeline for the Autoencoder.
 
 Handles:
     - Optimizer and LR scheduler setup (from config)
@@ -22,7 +22,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models.ffnn_autoencoder import FFNNAutoencoder
+from src.models.Model import Complete_Autoencoder
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ _LOSSES: dict[str, type[nn.Module]] = {
     "mse": nn.MSELoss,
     "mae": nn.L1Loss,
     "huber": nn.SmoothL1Loss,
+    "bce": nn.BCEWithLogitsLoss
 }
 
 
@@ -110,7 +111,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: FFNNAutoencoder,
+        model: Complete_Autoencoder,
         config: dict[str, Any],
         device: torch.device,
     ) -> None:
@@ -247,7 +248,7 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_checkpoint(
-                    os.path.join(self.checkpoint_dir, "ffnn_autoencoder_best.pt"),
+                    os.path.join(self.checkpoint_dir, "Autoencoder_best.pt"),
                     epoch=epoch,
                     val_loss=val_loss,
                 )

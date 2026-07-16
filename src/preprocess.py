@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import RobustScaler
+import torch
 
 
 class Preprocessing:
@@ -96,12 +97,12 @@ class Preprocessing:
     @overload
     def get_smote_dataset(
         self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]: ...
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     @overload
     def get_smote_dataset(
         self, test_size: float, val_size: float, random_state: int = 42
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]: ...
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     def get_smote_dataset(
         self,
@@ -127,12 +128,29 @@ class Preprocessing:
         if not val_size:
             X_train, X_test, y_train, y_test = split
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
-            return X_train_smote, X_test, y_train_smote, y_test
+            
+            # Add .to_numpy() to the Pandas objects
+            X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
+            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32)
+
+            return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor, y_test_tensor
         else:
             X_train, X_val, X_test, y_train, y_val, y_test = split
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
-            return X_train_smote, X_val, X_test, y_train_smote, y_val, y_test    
 
+            # Add .to_numpy() to the Pandas objects
+            X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
+            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32)
+            X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
+            
+            # Note: you also had a typo here in your original code (data= instead of dtype=)
+            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32) 
+
+            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor, y_test_tensor, y_val_tensor
 
     def get_class_weights(
         self,
