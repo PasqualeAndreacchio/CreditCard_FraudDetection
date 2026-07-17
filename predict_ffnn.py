@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from src.utils import load_config, set_seed, get_device, setup_logging
 from src.models.FFNNDecoder import FFNNAutoencoder
-from src.Evaluation.evaluator import Evaluator
+from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def main() -> None:
     test_loader, test_labels = load_test_data(config)
 
     # ── Evaluation ──────────────────────────────────────────────────
-    evaluator = Evaluator(model, config, device)
+    evaluator = ReconstructionEvaluator(model, config, device)
 
     # Compute anomaly scores
     scores = evaluator.compute_anomaly_scores(test_loader)
@@ -152,30 +152,8 @@ def main() -> None:
     # Find threshold
     threshold = evaluator.find_optimal_threshold(scores, test_labels)
 
-    # Full evaluation report
-    metrics = evaluator.evaluate(test_loader, test_labels, threshold=threshold)
-
-    # Diagnostic plots
-    plots_dir = "plots/"
-    evaluator.plot_results(scores, test_labels, threshold, save_dir=plots_dir)
-
-    # ── Summary ─────────────────────────────────────────────────────
-    print("\n" + "=" * 60)
-    print("  FFNN AUTOENCODER — EVALUATION SUMMARY")
-    print("=" * 60)
-    print(f"  Threshold : {metrics['threshold']:.6f}")
-    print(f"  Precision : {metrics['precision']:.4f}")
-    print(f"  Recall    : {metrics['recall']:.4f}")
-    print(f"  F1-score  : {metrics['f1']:.4f}")
-    print(f"  AUPRC     : {metrics['auprc']:.4f}")
-    print(f"  AUROC     : {metrics['auroc']:.4f}")
-    print("=" * 60)
-    print(f"\n  Diagnostic plots saved to: {plots_dir}")
-    print(f"  - {plots_dir}ffnn_error_distribution.png")
-    print(f"  - {plots_dir}ffnn_precision_recall_curve.png")
-    print(f"  - {plots_dir}ffnn_confusion_matrix.png")
-    print("=" * 60)
-
+    # Full evaluation report + plots
+    evaluator.evaluate(test_loader, test_labels, threshold=threshold)
 
 if __name__ == "__main__":
     main()

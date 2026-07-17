@@ -19,10 +19,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+import json
+
 from src.Evaluation.evaluation_utils import (
     find_f1_optimal_threshold,
     plot_confusion_matrix,
     plot_precision_recall_curve,
+    NumpyEncoder,
 )
 
 from sklearn.metrics import (
@@ -179,9 +182,10 @@ class ReconstructionEvaluator:
         loader: DataLoader,
         labels: np.ndarray,
         threshold: float | None = None,
-    ) -> dict[str, Any]:
-        """Run a complete evaluation and return a metrics dictionary.
+    ) -> None:
+        """Run a complete evaluation.
 
+        Computes metrics, saves them to a JSON file and generates diagnostic plots.
         If *threshold* is ``None``, the optimal threshold is computed
         from the data using the configured method.
 
@@ -189,11 +193,6 @@ class ReconstructionEvaluator:
             loader: DataLoader yielding feature tensors.
             labels: Ground-truth binary labels (0/1).
             threshold: Override anomaly threshold (optional).
-
-        Returns:
-            Dictionary with keys: ``threshold``, ``precision``, ``recall``,
-            ``f1``, ``auprc``, ``auroc``, ``confusion_matrix``,
-            ``classification_report``.
         """
         scores = self.compute_anomaly_scores(loader)
 
@@ -234,7 +233,26 @@ class ReconstructionEvaluator:
         logger.info("\n%s", report)
         logger.info("=" * 50)
 
-        return metrics
+        # Generate and save the plots
+        plot_dir = self.anomaly_cfg.get("plots_dir")
+        if plot_dir is None:
+            logger.warning("plots_dir not found in config!")
+            logger.warning("Falling back to default 'plots/reconstruction'")
+            plot_dir = "plots/reconstruction"
+        self.plot_results(scores, labels, threshold, save_dir=plot_dir)
+
+        # Save the metrics to a file and return them
+        results_dir = self.anomaly_cfg.get("results_dir")
+        if results_dir is None:
+            logger.warning("results_dir not found in config!")
+            logger.warning("Falling back to default 'results/reconstruction'")
+            results_dir = "results/reconstruction"
+        os.makedirs(results_dir, exist_ok=True)
+
+        metrics_path = os.path.join(results_dir, "metrics.json")
+        with open(metrics_path, "w") as f:
+            json.dump(metrics, f, indent=4, cls=NumpyEncoder)
+        logger.info("Saved metrics to: %s", metrics_path)
 
     # ── Plotting ────────────────────────────────────────────────────────
 
@@ -243,7 +261,7 @@ class ReconstructionEvaluator:
         scores: np.ndarray,
         labels: np.ndarray,
         threshold: float,
-        save_dir: str = "plots/",
+        save_dir: str = "plots/reconstruction",
     ) -> None:
         """Generate and save diagnostic plots.
 

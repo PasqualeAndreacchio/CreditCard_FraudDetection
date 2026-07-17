@@ -5,12 +5,14 @@ import torch
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
+import json
 from torch.utils.data import DataLoader
 
 from src.Evaluation.evaluation_utils import (
     find_f1_optimal_threshold,
     plot_confusion_matrix,
     plot_precision_recall_curve,
+    NumpyEncoder,
 )
 from sklearn.metrics import (
     precision_score,
@@ -25,6 +27,7 @@ from src.models.Model import Complete_Autoencoder
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
 
 class ClassificationEvaluator:
     """
@@ -57,15 +60,14 @@ class ClassificationEvaluator:
         dataloader: DataLoader,
         labels: np.ndarray,
         threshold: float | None = None,
-    ) -> dict[str, Any]:
+    ) -> None:
         """
-        Evaluate the model on the given dataset and return the results.
+        Evaluate the model on the given dataset.
+        Computes metrics, saves them to a JSON file and generates diagnostic plots.
         Args:
             - dataloader (DataLoader): DataLoader yielding feature tensors
             - labels (np.ndarray): Ground-truth labels
-            - threshold (float | None): Threshold used to predict the label
-        Returns:
-            - dict[str, Any]: Dictionary containing the evaluation results
+            - threshold (float | None): Threshold used to predict the label (auto-computed if None)
         """
         # Compute the probabilities and, in case, find the best threshold
         probs = self.compute_probabilities(dataloader)
@@ -75,7 +77,7 @@ class ClassificationEvaluator:
         # Predict the labels
         predictions = (probs[:, 1] > threshold).astype(np.int32)
         
-        # Get the metrics
+        # Get the metrics and save them into a dict
         precision   = precision_score(labels, predictions, zero_division=0)
         recall      = recall_score(labels, predictions, zero_division=0)
         f1          = f1_score(labels, predictions, zero_division=0)
@@ -83,6 +85,17 @@ class ClassificationEvaluator:
         roc_auc     = roc_auc_score(labels, probs[:, 1])
         conf_matrix = confusion_matrix(labels, predictions)
         report      = classification_report(labels, predictions, target_names=["Normal", "Fraud"])
+
+        metrics = {
+            "threshold"              : threshold,
+            "precision"              : precision,
+            "recall"                 : recall,
+            "f1"                     : f1,
+            "pr_auc"                 : pr_auc,
+            "roc_auc"                : roc_auc,
+            "conf_matrix"            : conf_matrix,
+            "classification_report"  : report,
+        }
 
         # Print the metrics
         logger.info("=" * 50)
@@ -98,17 +111,29 @@ class ClassificationEvaluator:
         logger.info("\n%s", report)
         logger.info("=" * 50)
 
-        # Return the metrics
-        return {
-            "threshold"              : threshold,
-            "precision"              : precision,
-            "recall"                 : recall,
-            "f1"                     : f1,
-            "pr_auc"                 : pr_auc,
-            "roc_auc"                : roc_auc,
-            "conf_matrix"            : conf_matrix,
-            "classification_report"  : report,
-        }
+        # Generate and save the plots
+        plot_dir = self.classification_config.get("plots_dir")
+        
+        if plot_dir is None:
+            logger.warning("plots_dir not found in config!")
+            logger.warning("Falling back to default 'plots/classification'")
+            plot_dir = "plots/classification"
+        self.plot_results(probs[:, 1], labels, threshold, save_dir=plot_dir)
+
+        # Save the metrics to a file and return them
+        results_dir = self.classification_config.get("results_dir")
+        if results_dir is None:
+            logger.warning("results_dir not found in config!")
+            logger.warning("Falling back to default 'results/classification'")
+            results_dir = "results/classification"
+        os.makedirs(results_dir, exist_ok=True)
+        
+        metrics_path = os.path.join(results_dir, "metrics.json")
+        
+
+        with open(metrics_path, "w") as f:
+            json.dump(metrics, f, indent=4, cls=NumpyEncoder)
+        logger.info("Saved metrics to: %s", metrics_path)
     
 
     def plot_results(
@@ -116,7 +141,7 @@ class ClassificationEvaluator:
         scores: np.ndarray,
         labels: np.ndarray,
         threshold: float,
-        save_dir: str = "plots/",
+        save_dir: str = "plots/classification",
     ) -> None:
         """
         Generate and save diagnostic plots.
@@ -132,6 +157,8 @@ class ClassificationEvaluator:
             - threshold (float): Classification threshold used for predictions.
             - save_dir (str): Directory to save plots.
         """
+        
+        # Create the directory to save the plots
         os.makedirs(save_dir, exist_ok=True)
 
         # Probability distribution

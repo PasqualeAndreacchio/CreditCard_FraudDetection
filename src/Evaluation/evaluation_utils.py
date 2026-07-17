@@ -1,6 +1,6 @@
 import os
 import logging
-
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
@@ -9,6 +9,21 @@ from sklearn.metrics import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """
+    JSON encoder that can serialize numpy types.
+    Useful to save the metrics into an external JSON file.
+    """
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        return super().default(obj)
 
 # Threshold util
 def find_f1_optimal_threshold(scores: np.ndarray, labels: np.ndarray) -> float:
