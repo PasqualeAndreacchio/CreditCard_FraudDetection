@@ -65,12 +65,12 @@ class Preprocessing:
     @overload
     def get_dataset(
         self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]: ...
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     @overload
     def get_dataset(
         self, test_size: float, val_size: float, random_state: int = 42
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]: ...
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     def get_dataset(
         self, 
@@ -91,7 +91,15 @@ class Preprocessing:
             - If val_size is given: X_train, X_val, X_test, y_train, y_val, y_test
         """
 
-        return self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
+        split =  self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
+        X_train, X_test, y_train, y_test = split
+
+        X_train_tensor = torch.tensor(X_train.to_numpy(), dtype=torch.float32)
+        X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
+        y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+        y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+
+        return X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor
     
 
     @overload
