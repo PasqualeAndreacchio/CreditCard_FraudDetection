@@ -19,6 +19,12 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from src.Evaluation.evaluation_utils import (
+    find_f1_optimal_threshold,
+    plot_confusion_matrix,
+    plot_precision_recall_curve,
+)
+
 from sklearn.metrics import (
     precision_score,
     recall_score,
@@ -27,7 +33,6 @@ from sklearn.metrics import (
     roc_auc_score,
     confusion_matrix,
     classification_report,
-    precision_recall_curve,
 )
 
 import matplotlib.pyplot as plt
@@ -37,7 +42,7 @@ from src.models.FFNNDecoder import FFNNAutoencoder
 logger = logging.getLogger(__name__)
 
 
-class Evaluator:
+class ReconstructionEvaluator:
     """Evaluate an :class:`FFNNAutoencoder` for anomaly-based fraud detection.
 
     The evaluator computes per-sample reconstruction errors, determines
@@ -133,7 +138,7 @@ class Evaluator:
                 raise ValueError(
                     "Ground-truth labels are required for 'f1_optimal' threshold."
                 )
-            threshold = self._find_f1_optimal_threshold(scores, labels)
+            threshold = find_f1_optimal_threshold(scores, labels)
             logger.info("Threshold (F1-optimal): %.6f", threshold)
 
         else:
@@ -141,36 +146,6 @@ class Evaluator:
 
         return threshold
 
-    @staticmethod
-    def _find_f1_optimal_threshold(
-        scores: np.ndarray, labels: np.ndarray
-    ) -> float:
-        """Search for the threshold that maximises F1-score.
-
-        Uses the precision-recall curve from scikit-learn to enumerate
-        candidate thresholds efficiently.
-
-        Args:
-            scores: Per-sample anomaly scores.
-            labels: Ground-truth binary labels (0=normal, 1=fraud).
-
-        Returns:
-            Optimal threshold value.
-        """
-        precisions, recalls, thresholds = precision_recall_curve(labels, scores)
-        # F1 = 2 * P * R / (P + R)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            f1_scores = 2 * precisions * recalls / (precisions + recalls)
-        f1_scores = np.nan_to_num(f1_scores)
-
-        best_idx = np.argmax(f1_scores)
-        # precision_recall_curve returns len(thresholds) = len(precisions) - 1
-        best_threshold = float(thresholds[min(best_idx, len(thresholds) - 1)])
-        logger.info(
-            "F1-optimal search: best_f1=%.4f at threshold=%.6f",
-            f1_scores[best_idx], best_threshold,
-        )
-        return best_threshold
 
     # ── Prediction ──────────────────────────────────────────────────────
 
@@ -273,9 +248,9 @@ class Evaluator:
         """Generate and save diagnostic plots.
 
         Produces three plots:
-        1. Reconstruction error distribution (normal vs fraud)
-        2. Precision-Recall curve
-        3. Confusion matrix heatmap
+        1. Reconstruction error distribution (normal vs fraud) — model-specific
+        2. Precision-Recall curve  — shared helper
+        3. Confusion matrix heatmap — shared helper
 
         Args:
             scores: Per-sample anomaly scores.
@@ -285,10 +260,10 @@ class Evaluator:
         """
         os.makedirs(save_dir, exist_ok=True)
 
+        # ── 1. Error Distribution (reconstruction-specific) ─────────
         normal_scores = scores[labels == 0]
         fraud_scores = scores[labels == 1]
 
-        # ── 1. Error Distribution ───────────────────────────────────
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.hist(normal_scores, bins=100, alpha=0.6, label="Normal", color="#3498db", density=True)
         ax.hist(fraud_scores, bins=100, alpha=0.6, label="Fraud", color="#e74c3c", density=True)
@@ -302,50 +277,20 @@ class Evaluator:
         plt.close()
         logger.info("Saved: %s", os.path.join(save_dir, "ffnn_error_distribution.png"))
 
-        # ── 2. Precision-Recall Curve ───────────────────────────────
-        precisions, recalls, _ = precision_recall_curve(labels, scores)
-        auprc = average_precision_score(labels, scores)
+        # ── 2. Precision-Recall Curve (shared helper) ───────────────
+        plot_precision_recall_curve(
+            labels, scores,
+            save_dir=save_dir,
+            filename="ffnn_precision_recall_curve.png",
+            title="FFNN Autoencoder — Precision-Recall Curve",
+        )
 
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.plot(recalls, precisions, color="#9b59b6", linewidth=2)
-        ax.fill_between(recalls, precisions, alpha=0.15, color="#9b59b6")
-        ax.set_xlabel("Recall")
-        ax.set_ylabel("Precision")
-        ax.set_title(f"FFNN Autoencoder — Precision-Recall Curve (AUPRC = {auprc:.4f})")
-        ax.set_xlim([0, 1])
-        ax.set_ylim([0, 1.05])
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, "ffnn_precision_recall_curve.png"), dpi=300)
-        plt.close()
-        logger.info("Saved: %s", os.path.join(save_dir, "ffnn_precision_recall_curve.png"))
-
-        # ── 3. Confusion Matrix ─────────────────────────────────────
+        # ── 3. Confusion Matrix (shared helper) ─────────────────────
         predictions = (scores > threshold).astype(np.int32)
         cm = confusion_matrix(labels, predictions)
-
-        fig, ax = plt.subplots(figsize=(7, 6))
-        im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
-        ax.figure.colorbar(im, ax=ax)
-        ax.set(
-            xticks=[0, 1],
-            yticks=[0, 1],
-            xticklabels=["Normal", "Fraud"],
-            yticklabels=["Normal", "Fraud"],
-            xlabel="Predicted",
-            ylabel="Actual",
+        plot_confusion_matrix(
+            cm,
+            save_dir=save_dir,
+            filename="ffnn_confusion_matrix.png",
             title="FFNN Autoencoder — Confusion Matrix",
         )
-        # Annotate cells
-        for i in range(2):
-            for j in range(2):
-                ax.text(
-                    j, i, f"{cm[i, j]:,}",
-                    ha="center", va="center",
-                    color="white" if cm[i, j] > cm.max() / 2 else "black",
-                    fontsize=14, fontweight="bold",
-                )
-        plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, "ffnn_confusion_matrix.png"), dpi=300)
-        plt.close()
-        logger.info("Saved: %s", os.path.join(save_dir, "ffnn_confusion_matrix.png"))
