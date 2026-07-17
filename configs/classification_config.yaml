@@ -1,0 +1,40 @@
+# Classification model — Complete_Autoencoder
+# Attention encoder + FFNN decoder with softmax output (2 classes)
+
+model:
+  encoder:
+    d_embed: 64
+    d_ff: 32
+    num_heads: 2
+    dropout: 0.1
+  decoder:
+    latent_dim: 64
+    hidden_layers: [32, 16, 8]
+    output_dim: 2          # 2 classes: Normal / Fraud
+    activation: "relu"
+    dropout: 0.1
+    batch_norm: true
+  task: "classification"
+
+batch_size: 256
+test_size: 0.2
+
+training:
+  epochs: 100
+  learning_rate: 0.001
+  batch_size: 256
+
+classification:
+  threshold_method: "f1_optimal"   # percentile | mean_std | f1_optimal
+  percentile: 95
+  std_multiplier: 2.0
+  plots_dir: "plots/classification"
+  results_dir: "results/classification"
+
+paths:
+  data_dir: "data/"
+  checkpoint_dir: "checkpoints/"
+  log_dir: "logs/"
+
+seed: 42
+device: "cpu"
