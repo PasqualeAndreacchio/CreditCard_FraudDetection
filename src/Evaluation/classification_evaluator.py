@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import torch
 import numpy as np
@@ -25,6 +27,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 class ClassificationEvaluator:
+    """
+    Evaluate a "Complete_Autoencoder" for direct fraud classification.
+
+    The evaluator computes per-sample fraud probabilities via softmax,
+    determines an optimal decision threshold, produces binary predictions,
+    and generates a comprehensive evaluation report.
+
+    Args of the constructor:
+        - model (Complete_Autoencoder): Trained "Complete_Autoencoder".
+        - config (dict): Full configuration dictionary (parsed from YAML).
+        - device (str): Torch device for computation.   
+    """
 
     def __init__(
         self,
@@ -56,39 +70,44 @@ class ClassificationEvaluator:
         # Compute the probabilities and, in case, find the best threshold
         probs = self.compute_probabilities(dataloader)
         if threshold is None:
-            threshold = self._find_optimal_threshold(probs, labels)
+            threshold = self._find_optimal_threshold(probs[:, 1], labels)
 
         # Predict the labels
-        predictions = self.predict_label(dataloader, threshold)
+        predictions = (probs[:, 1] > threshold).astype(np.int32)
         
         # Get the metrics
-        precision = precision_score(labels, predictions)
-        recall = recall_score(labels, predictions)
-        f1 = f1_score(labels, predictions)
-        pr_auc = average_precision_score(labels, probs[:, 1])
-        roc_auc = roc_auc_score(labels, probs[:, 1])
+        precision   = precision_score(labels, predictions, zero_division=0)
+        recall      = recall_score(labels, predictions, zero_division=0)
+        f1          = f1_score(labels, predictions, zero_division=0)
+        pr_auc      = average_precision_score(labels, probs[:, 1])
+        roc_auc     = roc_auc_score(labels, probs[:, 1])
         conf_matrix = confusion_matrix(labels, predictions)
-        report = classification_report(labels, predictions)
+        report      = classification_report(labels, predictions, target_names=["Normal", "Fraud"])
 
         # Print the metrics
-        logger.info("Threshold: %f", threshold)
-        logger.info("Precision: %f", precision)
-        logger.info("Recall: %f", recall)
-        logger.info("F1: %f", f1)
-        logger.info("PR AUC: %f", pr_auc)
-        logger.info("ROC AUC: %f", roc_auc)
-        logger.info("Confusion Matrix: %s", conf_matrix)
-        logger.info("Classification Report: %s", report)
+        logger.info("=" * 50)
+        logger.info("  EVALUATION RESULTS")
+        logger.info("=" * 50)
+        logger.info("  Threshold  : %.6f", threshold)
+        logger.info("  Precision  : %.4f", precision)
+        logger.info("  Recall     : %.4f", recall)
+        logger.info("  F1-score   : %.4f", f1)
+        logger.info("  PR AUC     : %.4f", pr_auc)
+        logger.info("  ROC AUC    : %.4f", roc_auc)
+        logger.info("  Confusion Matrix:\n%s", conf_matrix)
+        logger.info("\n%s", report)
+        logger.info("=" * 50)
 
         # Return the metrics
         return {
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
-            "pr_auc": pr_auc,
-            "roc_auc": roc_auc,
-            "conf_matrix": conf_matrix,
-            "threshold": threshold,
+            "threshold"              : threshold,
+            "precision"              : precision,
+            "recall"                 : recall,
+            "f1"                     : f1,
+            "pr_auc"                 : pr_auc,
+            "roc_auc"                : roc_auc,
+            "conf_matrix"            : conf_matrix,
+            "classification_report"  : report,
         }
     
 
@@ -99,22 +118,23 @@ class ClassificationEvaluator:
         threshold: float,
         save_dir: str = "plots/",
     ) -> None:
-        """Generate and save diagnostic plots.
+        """
+        Generate and save diagnostic plots.
 
         Produces three plots:
-        1. Fraud probability distribution (normal vs fraud) — model-specific
-        2. Precision-Recall curve — shared helper
-        3. Confusion matrix heatmap — shared helper
+            - Fraud probability distribution (normal vs fraud) — model-specific
+            - Precision-Recall curve — shared helper
+            - Confusion matrix heatmap — shared helper
 
-        Args:
-            scores: Per-sample fraud-class probabilities (probs[:, 1]).
-            labels: Ground-truth binary labels (0/1).
-            threshold: Classification threshold used for predictions.
-            save_dir: Directory to save plots.
+        Args of the method:
+            - scores (np.ndarray): Per-sample fraud-class probabilities (probs[:, 1]).
+            - labels (np.ndarray): Ground-truth binary labels (0/1).
+            - threshold (float): Classification threshold used for predictions.
+            - save_dir (str): Directory to save plots.
         """
         os.makedirs(save_dir, exist_ok=True)
 
-        # ── 1. Probability Distribution (classifier-specific) ─────────
+        # Probability distribution
         normal_scores = scores[labels == 0]
         fraud_scores = scores[labels == 1]
 
@@ -134,7 +154,7 @@ class ClassificationEvaluator:
         plt.close()
         logger.info("Saved: %s", os.path.join(save_dir, "classifier_prob_distribution.png"))
 
-        # ── 2. Precision-Recall Curve (shared helper) ────────────────
+        # Precision-recall curve
         plot_precision_recall_curve(
             labels, scores,
             save_dir=save_dir,
@@ -142,7 +162,7 @@ class ClassificationEvaluator:
             title="Classifier — Precision-Recall Curve",
         )
 
-        # ── 3. Confusion Matrix (shared helper) ───────────────────────
+        # Confusion matrix
         predictions = (scores > threshold).astype(np.int32)
         cm = confusion_matrix(labels, predictions)
         plot_confusion_matrix(
@@ -152,12 +172,13 @@ class ClassificationEvaluator:
             title="Classifier — Confusion Matrix",
         )
 
+
     @torch.no_grad()
     def compute_probabilities(self, dataloader: DataLoader) -> np.ndarray:
         """
         Compute probabilities using softmax for each sample in the dataloader.
         Args:
-            - dataloader: DataLoader yielding feature tensors (or (features, labels)
+            - dataloader (DataLoader): DataLoader yielding feature tensors (or (features, labels)
               tuples — labels are ignored)
         Returns:
             - np.ndarray: Array of probabilities for each sample
@@ -197,19 +218,19 @@ class ClassificationEvaluator:
         # Compute probabilities using the defined function and keep only
         # labels with probability higher than the provided threshold
         probabilities = self.compute_probabilities(dataloader)
-        return probabilities[:, 1] > threshold
+        return (probabilities[:, 1] > threshold).astype(np.int32)
 
 
     def _find_optimal_threshold(
-        self, 
+        self,
         scores: np.ndarray,
-        labels: np.ndarray,
+        labels: np.ndarray | None = None,
     ) -> float:
         """
         Determine the best threshold using the configured method.
         Args:
             - scores (np.ndarray): Array of anomaly scores
-            - labels (np.ndarray): Ground-truth labels
+            - labels (np.ndarray | None): Ground-truth labels (required for 'f1_optimal' method)
         Returns:
             - float: Threshold value
         """
