@@ -251,7 +251,7 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_checkpoint(
-                    os.path.join(self.checkpoint_dir, "Autoencoder_best.pt"),
+                    os.path.join(self.checkpoint_dir, "Autoencoder_best_2.pt"),
                     epoch=epoch,
                     val_loss=val_loss,
                 )
@@ -320,7 +320,7 @@ class Trainer:
                 y = y.to(self.device)
                 y_pred = self.model(x)
                 loss = self.criterion(y_pred, y)
-            elif self.task == "recostruction":
+            elif self.task == "reconstruction":
                 x_hat = self.model(x)
                 loss = self.criterion(x_hat, x)
             else:

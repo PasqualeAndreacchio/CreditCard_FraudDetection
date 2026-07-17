@@ -17,11 +17,11 @@ model:
   decoder:
     latent_dim: 64
     hidden_layers: [32, 16, 8]
-    output_dim: 1
+    output_dim: 30
     activation: "relu"
     dropout: 0.1
     batch_norm: True
-  task: "classification"           # "classification" or "reconstruction"
+  task: "reconstruction"           # "classification" or "reconstruction"
 
 # ─── DataLoaders ───────────────────────────────────────────────────────────────
 batch_size: 256                    # Mini-batch size
@@ -36,7 +36,7 @@ training:
   weight_decay: 0.0001               # L2 regularization (AdamW)
   optimizer: "adam"                   # Optimizer: adam | adamw | sgd
   scheduler:
-    type: "reduce_on_plateau"        # LR scheduler: reduce_on_plateau | cosine | step | none
+    type: "none"        # LR scheduler: reduce_on_plateau | cosine | step | none
     patience: 10                     # Epochs to wait before reducing LR (reduce_on_plateau)
     factor: 0.5                      # LR reduction factor
     step_size: 30                    # Step size for StepLR scheduler
@@ -44,7 +44,7 @@ training:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
     min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "bce"                        # Reconstruction loss: mse | mae | huber | bce
+  loss: "mse"                        # Reconstruction loss: mse | mae | huber | bce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────
 anomaly:
