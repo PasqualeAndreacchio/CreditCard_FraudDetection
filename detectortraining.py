@@ -67,9 +67,9 @@ test_loader = DataLoader(
 # Model configuration and definition
 detector = Complete_Autoencoder(config=config)
 
+
 # Training configuration and definition
 trainer = Trainer(model=detector, config=config)
-
 
 # ----------------------------------------------------------
 # TRAINING PHASE 
@@ -80,5 +80,5 @@ results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
 
 # After trainer.fit() finishes...
 print("Saving training history...")
-with open("training_history_1.json", "w") as f:
+with open("training_history_3.json", "w") as f:
     json.dump(results, f, indent=4)

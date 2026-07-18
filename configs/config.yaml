@@ -17,14 +17,14 @@ model:
   decoder:
     latent_dim: 64
     hidden_layers: [32, 16, 8]
-    output_dim: 30
+    output_dim: 2
     activation: "relu"
     dropout: 0.1
     batch_norm: True
-  task: "reconstruction"           # "classification" or "reconstruction"
+  task: "classification"           # "classification" or "reconstruction"
 
 # ─── DataLoaders ───────────────────────────────────────────────────────────────
-batch_size: 256                    # Mini-batch size
+batch_size: 512                    # Mini-batch size
 test_size: 0.2                     # fraction of samples for the test set
 val_size: 0                        # fraction of samples for the validation set
 
@@ -44,7 +44,7 @@ training:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
     min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "mse"                        # Reconstruction loss: mse | mae | huber | bce
+  loss: "ce"                        # Reconstruction loss: mse | mae | huber | bce | ce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────
 anomaly:

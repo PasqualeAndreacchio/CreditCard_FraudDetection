@@ -33,7 +33,8 @@ _LOSSES: dict[str, type[nn.Module]] = {
     "mse": nn.MSELoss,
     "mae": nn.L1Loss,
     "huber": nn.SmoothL1Loss,
-    "bce": nn.BCEWithLogitsLoss
+    "bce": nn.BCEWithLogitsLoss,
+    "ce": nn.CrossEntropyLoss
 }
 
 
@@ -251,7 +252,7 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_checkpoint(
-                    os.path.join(self.checkpoint_dir, "Autoencoder_best_2.pt"),
+                    os.path.join(self.checkpoint_dir, "Classifier_best_1.pt"),
                     epoch=epoch,
                     val_loss=val_loss,
                 )

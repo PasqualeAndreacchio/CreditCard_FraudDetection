@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import RobustScaler
 import torch
+import torch.nn.functional as F
 
 
 class Preprocessing:
@@ -96,10 +97,14 @@ class Preprocessing:
 
         X_train_tensor = torch.tensor(X_train.to_numpy(), dtype=torch.float32)
         X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-        y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.float32).unsqueeze(-1)
-        y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+        y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.long)
+        y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
 
-        return X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor
+        # One-hot configuration for softmax output
+        y_train_tensor_onehot = F.one_hot(y_train_tensor, 2).float()
+        y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
+
+        return X_train_tensor, X_test_tensor, y_train_tensor_onehot, y_test_tensor_onehot
     
 
     @overload
@@ -140,10 +145,14 @@ class Preprocessing:
             # Add .to_numpy() to the Pandas objects
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(-1)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.long)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
+            
+            # One-hot configuration for softmax output
+            y_train_smote_tensor_onehot = F.one_hot(y_train_smote_tensor, 2).float()
+            y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
 
-            return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor, y_test_tensor
+            return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor_onehot, y_test_tensor_onehot
         else:
             X_train, X_val, X_test, y_train, y_val, y_test = split
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
@@ -151,12 +160,17 @@ class Preprocessing:
             # Add .to_numpy() to the Pandas objects
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(-1)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(-1)
             X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(-1)
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.long)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
+            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
 
-            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor, y_test_tensor, y_val_tensor
+            # One-hot configuration for softmax output
+            y_train_smote_tensor_onehot = F.one_hot(y_train_smote_tensor, 2).float()
+            y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
+            y_val_tensor_onehot = F.one_hot(y_val_tensor, 2).float()
+
+            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor_onehot, y_test_tensor_onehot, y_val_tensor_onehot
 
     def get_class_weights(
         self,
