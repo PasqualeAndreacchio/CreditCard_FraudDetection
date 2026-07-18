@@ -3,20 +3,20 @@
 
 model:
   encoder:
-    d_embed: 64
-    d_ff: 32
-    num_heads: 2
+    d_embed: 128
+    d_ff: 64
+    num_heads: 4
     dropout: 0.1
   decoder:
-    latent_dim: 64
-    hidden_layers: [32, 16, 8]
+    latent_dim: 128
+    hidden_layers: [64, 32, 16, 8]
     output_dim: 2          # 2 classes: Normal / Fraud
     activation: "relu"
     dropout: 0.1
     batch_norm: true
   task: "classification"
 
-batch_size: 256
+batch_size: 512
 test_size: 0.2
 
 training:

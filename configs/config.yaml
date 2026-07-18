@@ -10,13 +10,13 @@
 # ─── Model Architecture ─────────────────────────────────────────────────────
 model:
   encoder:
-    d_embed: 64            
-    d_ff: 32
+    d_embed: 128            
+    d_ff: 64
     num_heads: 4
     dropout: 0.1
   decoder:
-    latent_dim: 64
-    hidden_layers: [32, 16, 8]
+    latent_dim: 128
+    hidden_layers: [64, 32, 16, 8]
     output_dim: 2
     activation: "relu"
     dropout: 0.1

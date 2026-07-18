@@ -252,7 +252,7 @@ class Trainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_checkpoint(
-                    os.path.join(self.checkpoint_dir, "Classifier_best_2.pt"),
+                    os.path.join(self.checkpoint_dir, "Classifier_best_3.pt"),
                     epoch=epoch,
                     val_loss=val_loss,
                 )
