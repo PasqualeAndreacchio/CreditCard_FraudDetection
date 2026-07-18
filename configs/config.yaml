@@ -12,7 +12,7 @@ model:
   encoder:
     d_embed: 64            
     d_ff: 32
-    num_heads: 2
+    num_heads: 4
     dropout: 0.1
   decoder:
     latent_dim: 64
