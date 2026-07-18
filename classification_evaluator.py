@@ -27,6 +27,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.Model import Complete_Autoencoder
 from src.Evaluation.classification_evaluator import ClassificationEvaluator
+from src.Datasets.preprocess import Preprocessing
 from src.utils import set_seed, get_device, setup_logging
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,12 @@ def parse_args() -> argparse.Namespace:
         default="checkpoints/classifier_best.pt",
         help="Path to the trained model checkpoint.",
     )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=0,
+        help="Number of DataLoader worker processes for parallel data loading (default: 0 = main process only).",
+    )
     return parser.parse_args()
 
 
@@ -59,13 +66,14 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def load_test_data(config: dict) -> tuple[DataLoader, np.ndarray]:
+def load_test_data(config: dict, num_workers: int = 0) -> tuple[DataLoader, np.ndarray]:
     """Load the test dataset and return a DataLoader and labels.
 
     Tries preprocessed tensors first, falls back to raw CSV.
 
     Args:
         config: Full configuration dictionary.
+        num_workers: Number of worker processes for the DataLoader.
 
     Returns:
         Tuple of (test_loader, test_labels).
@@ -79,33 +87,38 @@ def load_test_data(config: dict) -> tuple[DataLoader, np.ndarray]:
         X_test = torch.load(os.path.join(preprocessed_path, "X_test.pt"), weights_only=True)
         y_test = torch.load(os.path.join(preprocessed_path, "y_test.pt"), weights_only=True)
     else:
-        logger.warning("Preprocessed data not found. Falling back to raw CSV.")
+        logger.warning("Preprocessed data not found. Falling back to raw CSV with Preprocessing pipeline.")
         csv_path = os.path.join(data_dir, "creditcard.csv")
         if not os.path.isfile(csv_path):
             raise FileNotFoundError(f"Dataset not found: {csv_path}")
 
         df = pd.read_csv(csv_path)
-        features = df.drop(columns=["Class"]).values.astype(np.float32)
-        labels = df["Class"].values.astype(np.float32)
+        preprocessor = Preprocessing(df, drop_time=config.get("drop_time", False))
 
-        mean = features.mean(axis=0)
-        std = features.std(axis=0) + 1e-8
-        features = (features - mean) / std
+        test_size = config.get("test_size", 0.2)
+        seed = config.get("seed", 42)
 
-        from sklearn.model_selection import train_test_split
-        _, X_test_np, _, y_test_np = train_test_split(
-            features, labels,
-            test_size=config.get("test_size", 0.2),
-            random_state=config.get("seed", 42),
-            stratify=labels,
+        # get_dataset() applies RobustScaler on Amount/Time (fit on train only)
+        # and returns one-hot labels — we convert them back to binary with argmax.
+        # Note: SMOTE must NOT be used here; the test set must reflect the real
+        # class distribution to produce unbiased evaluation metrics.
+        _, X_test, _, y_test_onehot = preprocessor.get_dataset(
+            test_size=test_size,
+            random_state=seed,
         )
 
-        X_test = torch.tensor(X_test_np, dtype=torch.float32)
-        y_test = torch.tensor(y_test_np, dtype=torch.float32)
+        # y_test_onehot shape: (N, 2) — convert to 1D binary labels
+        y_test = torch.argmax(y_test_onehot, dim=1).float()
 
     logger.info("Test data: %d samples.", X_test.shape[0])
 
-    test_loader = DataLoader(TensorDataset(X_test), batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(
+        TensorDataset(X_test),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=(num_workers > 0),
+    )
     return test_loader, y_test.numpy()
 
 
@@ -136,7 +149,7 @@ def main() -> None:
     )
 
     # Data
-    test_loader, test_labels = load_test_data(config)
+    test_loader, test_labels = load_test_data(config, num_workers=args.num_workers)
 
     # Evaluation
     evaluator = ClassificationEvaluator(model, config, device)

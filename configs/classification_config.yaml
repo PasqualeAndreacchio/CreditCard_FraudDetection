@@ -18,6 +18,7 @@ model:
 
 batch_size: 512
 test_size: 0.2
+drop_time: false    # true → drop the 'Time' column before preprocessing
 
 training:
   epochs: 100
