@@ -3,7 +3,7 @@ Prediction / Evaluation entry-point for the Complete_Autoencoder classifier.
 
 Usage::
 
-    python classification_evaluator.py --config configs/classification_config.yaml \\
+    python classification_evaluation.py --config configs/classification_config.yaml \\
                                        --checkpoint checkpoints/classifier_best.pt
 
 This script:
