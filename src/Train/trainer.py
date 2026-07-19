@@ -17,8 +17,10 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score as sklearn_f1, precision_recall_curve
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -162,6 +164,7 @@ class Trainer:
         self.history: dict[str, list[float]] = {
             "train_loss": [],
             "val_loss": [],
+            "val_f1": [],
             "lr": [],
         }
 
@@ -223,54 +226,71 @@ class Trainer:
         self,
         train_loader: DataLoader,
         val_loader: DataLoader,
+        val_labels: np.ndarray | None = None,
     ) -> dict[str, list[float]]:
         """Run the full training loop.
 
         Args:
-            train_loader: DataLoader yielding batches of *normal* transactions
-                (tensors of shape ``(batch, input_dim)``).
-            val_loader: DataLoader yielding validation batches (same format).
+            train_loader: DataLoader yielding training batches.
+            val_loader: DataLoader yielding validation batches.
+            val_labels: Optional ground-truth integer labels for the validation set
+                (shape ``(N,)``). Required when ``val_metric = "f1"`` in the config.
 
         Returns:
             Training history dictionary with keys
-            ``train_loss``, ``val_loss``, ``lr``.
+            ``train_loss``, ``val_loss``, ``val_f1``, ``lr``.
         """
         epochs = self.config["training"]["epochs"]
-        best_val_loss = float("inf")
+        val_metric = self.config["training"].get("val_metric", "loss")
+        use_f1 = (val_metric == "f1" and val_labels is not None)
 
-        logger.info("Starting training for up to %d epochs.", epochs)
+        # For F1 metric: higher is better. For loss: lower is better.
+        best_metric = 0.0 if use_f1 else float("inf")
+
+        logger.info(
+            "Starting training for up to %d epochs (checkpointing on %s).",
+            epochs, "val_f1" if use_f1 else "val_loss",
+        )
         t_start = time.time()
 
         for epoch in range(1, epochs + 1):
-            # ── Train ───────────────────────────────────────────────
+            # ── Train ───────────────────────────────────────────────────────
             train_loss = self._train_epoch(train_loader, epoch, epochs)
 
-            # ── Validate ────────────────────────────────────────────
+            # ── Validate ────────────────────────────────────────────────────
             val_loss = self._validate_epoch(val_loader)
+            val_f1 = self._compute_val_f1(val_loader, val_labels) if use_f1 else 0.0
 
-            # ── Record ──────────────────────────────────────────────
+            # ── Record ──────────────────────────────────────────────────────
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.history["train_loss"].append(train_loss)
             self.history["val_loss"].append(val_loss)
+            self.history["val_f1"].append(val_f1)
             self.history["lr"].append(current_lr)
 
             logger.info(
-                "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  lr=%.2e",
-                epoch, epochs, train_loss, val_loss, current_lr,
+                "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  val_f1=%.4f  |  lr=%.2e",
+                epoch, epochs, train_loss, val_loss, val_f1, current_lr,
             )
 
-            # ── Checkpointing ───────────────────────────────────────────
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
+            # ── Checkpointing ───────────────────────────────────────────────
+            metric_value = val_f1 if use_f1 else val_loss
+            is_better = (metric_value > best_metric) if use_f1 else (metric_value < best_metric)
+
+            if is_better:
+                best_metric = metric_value
                 checkpoint_name = self.config["paths"].get("checkpoint_name", "model_best.pt")
                 self.save_checkpoint(
                     os.path.join(self.checkpoint_dir, checkpoint_name),
                     epoch=epoch,
                     val_loss=val_loss,
                 )
-                logger.info("  ↳ Best model saved (val_loss=%.6f).", val_loss)
+                logger.info(
+                    "  ↳ Best model saved (%s=%.4f).",
+                    "val_f1" if use_f1 else "val_loss", best_metric,
+                )
 
-            # ── Scheduler Step ──────────────────────────────────────
+            # ── Scheduler Step (sempre su val_loss) ──────────────────────────
             if self.scheduler is not None:
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
@@ -281,14 +301,19 @@ class Trainer:
 
             # ── Early Stopping ──────────────────────────────────────
             if self.early_stopping is not None:
-                if self.early_stopping.step(val_loss):
+                # Per F1 (higher=better), passiamo il negativo all'EarlyStopping
+                # che internamente cerca un valore decrescente
+                es_value = -val_f1 if use_f1 else val_loss
+                if self.early_stopping.step(es_value):
                     logger.info("Training stopped early at epoch %d.", epoch)
                     break
 
         elapsed = time.time() - t_start
         logger.info(
-            "Training complete in %.1f s.  Best val_loss=%.6f",
-            elapsed, best_val_loss,
+            "Training complete in %.1f s.  Best %s=%.4f",
+            elapsed,
+            "val_f1" if use_f1 else "val_loss",
+            best_metric,
         )
         return self.history
 
@@ -382,7 +407,53 @@ class Trainer:
 
         return running_loss / max(n_batches, 1)
 
-    # ── Checkpointing ───────────────────────────────────────────────────
+    @torch.no_grad()
+    def _compute_val_f1(
+        self, loader: DataLoader, labels: np.ndarray
+    ) -> float:
+        """Compute the F1-optimal score on the validation set.
+
+        Collects full fraud probability scores, finds the threshold that
+        maximises F1 via the precision-recall curve (same algorithm used
+        by the final evaluator), and returns that F1 value.
+
+        Using the optimal threshold — instead of a fixed 0.5 — is essential
+        because the model outputs fraud probabilities that are extremely small
+        (near 0) for all samples.  A fixed 0.5 threshold would classify
+        everything as Normal, giving a meaningless F1 ≈ 0 for checkpointing.
+
+        Args:
+            loader: Validation DataLoader.
+            labels: Ground-truth binary integer labels (0=normal, 1=fraud).
+
+        Returns:
+            Best achievable F1-score on the validation set.
+        """
+        self.model.eval()
+        all_scores: list[float] = []
+
+        for batch in loader:
+            x = batch[0] if isinstance(batch, (list, tuple)) else batch
+            x = x.to(self.device)
+            outputs = self.model(x)
+            probs = torch.softmax(outputs, dim=1)
+            all_scores.extend(probs[:, 1].cpu().numpy().tolist())
+
+        scores = np.array(all_scores)
+
+        # Find the threshold that maximises F1 on the validation set
+        precisions, recalls, thresholds = precision_recall_curve(labels, scores)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            f1_values = 2 * precisions * recalls / (precisions + recalls)
+        f1_values = np.nan_to_num(f1_values)
+
+        best_idx = int(np.argmax(f1_values))
+        best_threshold = float(thresholds[min(best_idx, len(thresholds) - 1)])
+        preds = (scores > best_threshold).astype(int)
+
+        return float(sklearn_f1(labels, preds, zero_division=0))
+
+    # ── Checkpointing ──────────────────────────────────────────────────────
 
     def save_checkpoint(
         self, path: str, epoch: int = 0, val_loss: float = 0.0

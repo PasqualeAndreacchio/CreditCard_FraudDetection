@@ -3,13 +3,13 @@
 
 model:
   encoder:
-    d_embed: 64
-    d_ff: 32
-    num_heads: 4
+    d_embed: 128
+    d_ff: 64
+    num_heads: 8
     dropout: 0.1
   decoder:
-    latent_dim: 64
-    hidden_layers: [32, 16, 8]
+    latent_dim: 128
+    hidden_layers: [128, 64, 64, 32, 16]
     output_dim: 2          # 2 classes: Normal / Fraud
     activation: "relu"
     dropout: 0.1
@@ -28,13 +28,14 @@ training:
   batch_size: 512
   scheduler:
     type: "reduce_on_plateau"  # era "none" — ora riduce il LR quando la val_loss smette di migliorare
-    patience: 7                # epoche senza miglioramento prima di ridurre il LR
+    patience:   7                # epoche senza miglioramento prima di ridurre il LR
     factor: 0.5                # LR dimezzato ogni volta
   early_stopping:
     enabled: true
     patience: 20         # era 10 — troppo aggressivo, fermava a ep.19 con underfitting
     min_delta: 0.0001    # era 0.00001 — troppo piccolo, qualsiasi rumore bloccava il contatore
   loss: "ce"             # Loss function: ce (CrossEntropy for classification)
+  val_metric: "f1"       # Metrica per checkpointing/early-stopping: "f1" | "loss"
 
 classification:
   threshold_method: "f1_optimal"   # percentile | mean_std | f1_optimal

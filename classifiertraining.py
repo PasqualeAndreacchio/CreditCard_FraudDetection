@@ -96,7 +96,12 @@ trainer = Trainer(model=classifier, config=config, class_weight=class_weight)
 # ----------------------------------------------------------
 
 print("Starting classifier training...")
-results = trainer.fit(train_loader=train_loader, val_loader=test_loader)
+
+# val_labels: etichette intere (0/1) per il calcolo del F1 a ogni epoca
+# y_test è one-hot (N, 2) → argmax riporta a (N,) int
+val_labels = torch.argmax(y_test, dim=1).numpy()
+
+results = trainer.fit(train_loader=train_loader, val_loader=test_loader, val_labels=val_labels)
 
 # ----------------------------------------------------------
 # SAVE TRAINING HISTORY
