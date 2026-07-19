@@ -38,11 +38,19 @@ _LOSSES: dict[str, type[nn.Module]] = {
 }
 
 
-def _build_loss(name: str) -> nn.Module:
-    """Return a loss module by name."""
+def _build_loss(name: str, weight: torch.Tensor | None = None) -> nn.Module:
+    """Return a loss module by name.
+    
+    Args:
+        name: One of the keys in _LOSSES.
+        weight: Optional class-weight tensor passed to CrossEntropyLoss
+                (ignored for other loss types).
+    """
     key = name.lower()
     if key not in _LOSSES:
         raise ValueError(f"Unknown loss '{name}'. Choose from {list(_LOSSES.keys())}.")
+    if key == "ce" and weight is not None:
+        return nn.CrossEntropyLoss(weight=weight)
     return _LOSSES[key]()
 
 
@@ -114,6 +122,7 @@ class Trainer:
         self,
         model: Complete_Autoencoder,
         config: dict[str, Any],
+        class_weight: torch.Tensor | None = None,
     ) -> None:
         
         self.config = config
@@ -125,8 +134,10 @@ class Trainer:
         # Task
         self.task = config['model']['task']
 
-        # Loss
-        self.criterion = _build_loss(training_cfg["loss"])
+        # Loss — passa i class weights a CrossEntropyLoss se forniti
+        if class_weight is not None:
+            class_weight = class_weight.to(self.device)
+        self.criterion = _build_loss(training_cfg["loss"], weight=class_weight)
 
         # Optimizer
         self.optimizer = self._build_optimizer(training_cfg)
@@ -248,11 +259,12 @@ class Trainer:
                 epoch, epochs, train_loss, val_loss, current_lr,
             )
 
-            # ── Checkpointing ───────────────────────────────────────
+            # ── Checkpointing ───────────────────────────────────────────
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                checkpoint_name = self.config["paths"].get("checkpoint_name", "model_best.pt")
                 self.save_checkpoint(
-                    os.path.join(self.checkpoint_dir, "Classifier_best_3.pt"),
+                    os.path.join(self.checkpoint_dir, checkpoint_name),
                     epoch=epoch,
                     val_loss=val_loss,
                 )
@@ -355,10 +367,6 @@ class Trainer:
                     y = batch[1]
                     y = y.to(self.device)
                     y_pred = self.model(x)
-                    
-                    # Same shape alignment as in training!
-                    y = y
-                    
                     loss = self.criterion(y_pred, y)
                     
                 elif self.task == "reconstruction":

@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="checkpoints/classifier_best.pt",
+        default="checkpoints/Classifier_best.pt",
         help="Path to the trained model checkpoint.",
     )
     parser.add_argument(
@@ -151,12 +151,10 @@ def main() -> None:
     # Data
     test_loader, test_labels = load_test_data(config, num_workers=args.num_workers)
 
-    # Evaluation
+    # Evaluation — compute_probabilities, threshold search and metrics
+    # are all handled internally by evaluate(); no need to duplicate them here.
     evaluator = ClassificationEvaluator(model, config, device)
-
-    probs = evaluator.compute_probabilities(test_loader)
-    threshold = evaluator._find_optimal_threshold(probs[:, 1], test_labels)
-    evaluator.evaluate(test_loader, test_labels, threshold=threshold)
+    evaluator.evaluate(test_loader, test_labels)
 
 
 if __name__ == "__main__":

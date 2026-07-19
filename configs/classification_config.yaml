@@ -3,27 +3,38 @@
 
 model:
   encoder:
-    d_embed: 128
-    d_ff: 64
+    d_embed: 64
+    d_ff: 32
     num_heads: 4
     dropout: 0.1
   decoder:
-    latent_dim: 128
-    hidden_layers: [64, 32, 16, 8]
+    latent_dim: 64
+    hidden_layers: [32, 16, 8]
     output_dim: 2          # 2 classes: Normal / Fraud
     activation: "relu"
     dropout: 0.1
     batch_norm: true
   task: "classification"
 
-batch_size: 512
 test_size: 0.2
 drop_time: false    # true → drop the 'Time' column before preprocessing
+use_smote: true     # false → usa dataset originale sbilanciato + Weighted CrossEntropy
 
 training:
   epochs: 100
   learning_rate: 0.001
-  batch_size: 256
+  weight_decay: 0.0001
+  optimizer: "adam"
+  batch_size: 512
+  scheduler:
+    type: "reduce_on_plateau"  # era "none" — ora riduce il LR quando la val_loss smette di migliorare
+    patience: 7                # epoche senza miglioramento prima di ridurre il LR
+    factor: 0.5                # LR dimezzato ogni volta
+  early_stopping:
+    enabled: true
+    patience: 20         # era 10 — troppo aggressivo, fermava a ep.19 con underfitting
+    min_delta: 0.0001    # era 0.00001 — troppo piccolo, qualsiasi rumore bloccava il contatore
+  loss: "ce"             # Loss function: ce (CrossEntropy for classification)
 
 classification:
   threshold_method: "f1_optimal"   # percentile | mean_std | f1_optimal
@@ -35,6 +46,7 @@ classification:
 paths:
   data_dir: "data/"
   checkpoint_dir: "checkpoints/"
+  checkpoint_name: "Classifier_best.pt"   # nome del checkpoint salvato/caricato
   log_dir: "logs/"
 
 seed: 42
