@@ -107,3 +107,26 @@ class Encoder(nn.Module):
         norm2out = self.norm2(ffnnout + norm1out)
 
         return norm2out #, att_weights (Batch, nfeatutes, d_model)
+
+class ContrastiveHead(nn.Module):
+
+    def __init__(self, dim_in, dim_out, p_drop):
+        super().__init__()
+
+        self.layer1 = nn.Sequential(
+            nn.Linear(dim_in, dim_in),
+            nn.Dropout(p=p_drop),
+            nn.ReLU()
+        )
+
+        self.layer2 = nn.Sequential(
+            nn.Linear(dim_in, dim_out),
+            nn.Dropout(p=p_drop),
+            nn.ReLU()
+        )
+        
+    def forward(self, x):
+        out1 = self.layer1(x)
+        out = self.layer2(out1)
+
+        return out

@@ -107,7 +107,7 @@ results = trainer.fit(train_loader=train_loader, val_loader=test_loader, val_lab
 # SAVE TRAINING HISTORY
 # ----------------------------------------------------------
 
-history_path = "training_history_classifier.json"
+history_path = "histories/training_history_classifier.json"
 print(f"Saving training history to {history_path}...")
 with open(history_path, "w") as f:
     json.dump(results, f, indent=4)
