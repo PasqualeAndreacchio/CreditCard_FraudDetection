@@ -174,21 +174,16 @@ class TripletNTXentLoss(nn.Module):
         self.temperature = temperature
 
     def forward(self, anchor, positive, negative):
-        # 1. Force flatten from (512, 1, 64) to (512, 64)
-        # Using .view(batch_size, -1) is safer than squeeze because it handles any extra dims
-        anchor = anchor.view(anchor.size(0), -1)
-        positive = positive.view(positive.size(0), -1)
-        negative = negative.view(negative.size(0), -1)
 
-        # 2. Compute Cosine Similarity strictly on dim=1 (the 64 features)
-        # Result of cosine_sim is (512,), unsqueeze(1) makes it (512, 1)
+        # Compute Cosine Similarity 
+        # Result of cosine_sim is (batch,), unsqueeze(1) makes it (batch, 1)
         pos_sim = F.cosine_similarity(anchor, positive, dim=1).unsqueeze(1) / self.temperature
         neg_sim = F.cosine_similarity(anchor, negative, dim=1).unsqueeze(1) / self.temperature
 
-        # 3. Concatenate into shape (512, 2)
+        # Concatenate into shape (batch, 2)
         logits = torch.cat([pos_sim, neg_sim], dim=1)
 
-        # 4. Create targets of shape (512,) and compute cross entropy
+        # Create targets of shape (batch,) and compute cross entropy
         labels = torch.zeros(anchor.size(0), dtype=torch.long, device=anchor.device)
 
         loss = F.cross_entropy(logits, labels)

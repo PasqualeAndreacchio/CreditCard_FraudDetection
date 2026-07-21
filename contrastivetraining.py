@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch.optim as optim
+from imblearn.over_sampling import SMOTE
 
 from src.Datasets.datasets import ContrastiveDataset
 from src.models.AttentionEncoder import Encoder, ContrastiveHead, InputEmbedding
@@ -14,8 +15,12 @@ from src.utils import TripletNTXentLoss
 
 
 data = pd.read_csv("data/creditcard.csv")
+smote = SMOTE(random_state=42)
 
-dataset = ContrastiveDataset(df = data)
+X, y = smote.fit_resample(data.iloc[:,:-1], data.iloc[:, -1])
+smotedata = pd.concat([X, y], axis=1)
+
+dataset = ContrastiveDataset(df = smotedata)
 loader = DataLoader(
     dataset=dataset, 
     batch_size=512, 
@@ -24,15 +29,17 @@ loader = DataLoader(
 
 model = nn.Sequential(
     InputEmbedding(d_embed=64),
-    Encoder(d_embed=64, d_ff=32, num_heads=2, dropout=0.1), 
+    Encoder(d_embed=64, d_ff=64, num_heads=4, dropout=0.1),
+    Encoder(d_embed=64, d_ff=64, num_heads=4, dropout=0.1), 
     ContrastiveHead(dim_in=64, dim_out=64, p_drop=0.1)
 )   
+
 
 criterion = TripletNTXentLoss(temperature=0.1)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 # Training Loop
-epochs = 5
+epochs = 30
 for epoch in range(epochs):
     model.train()
     total_loss = 0

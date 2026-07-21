@@ -108,10 +108,29 @@ class Encoder(nn.Module):
 
         return norm2out #, att_weights (Batch, nfeatutes, d_model)
 
+
+class MeanPooling(nn.Module):
+    """
+    Collapses the sequence dimension of the encoder output by averaging the 
+    embeddings of all tokens. Assumes no padding tokens are present in the batch.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, encoder_output):
+        # encoder_output shape: (batch, seq_len, d_embed)
+        
+        # Calculate the mean across the sequence length (dim=1)
+        # Resulting shape: (batch, d_embed)
+        pooled_output = encoder_output.mean(dim=1)
+        
+        return pooled_output
+
+
 class ContrastiveHead(nn.Module):
 
     def __init__(self, dim_in, dim_out, p_drop):
-        super().__init__()
+        super().__init__()        
 
         self.layer1 = nn.Sequential(
             nn.Linear(dim_in, dim_in),
@@ -121,12 +140,16 @@ class ContrastiveHead(nn.Module):
 
         self.layer2 = nn.Sequential(
             nn.Linear(dim_in, dim_out),
-            nn.Dropout(p=p_drop),
-            nn.ReLU()
+            nn.Dropout(p=p_drop)
         )
+
+        self.pooling = MeanPooling()
+
         
     def forward(self, x):
         out1 = self.layer1(x)
-        out = self.layer2(out1)
+        out2 = self.layer2(out1)
+
+        out = self.pooling(out2)
 
         return out
