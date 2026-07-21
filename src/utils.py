@@ -168,23 +168,59 @@ def count_parameters(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-class TripletNTXentLoss(nn.Module):
+class SupervisedContrastiveLoss(nn.Module):
     def __init__(self, temperature=0.1):
         super().__init__()
         self.temperature = temperature
 
-    def forward(self, anchor, positive, negative):
-
-        # Compute Cosine Similarity 
-        # Result of cosine_sim is (batch,), unsqueeze(1) makes it (batch, 1)
-        pos_sim = F.cosine_similarity(anchor, positive, dim=1).unsqueeze(1) / self.temperature
-        neg_sim = F.cosine_similarity(anchor, negative, dim=1).unsqueeze(1) / self.temperature
-
-        # Concatenate into shape (batch, 2)
-        logits = torch.cat([pos_sim, neg_sim], dim=1)
-
-        # Create targets of shape (batch,) and compute cross entropy
-        labels = torch.zeros(anchor.size(0), dtype=torch.long, device=anchor.device)
-
-        loss = F.cross_entropy(logits, labels)
+    def forward(self, embeddings, labels):
+        """
+        Args:
+            embeddings: Tensor of shape (batch_size, dim) from the projection head.
+            labels: Tensor of shape (batch_size,) containing the class labels.
+        """
+        
+        # Normalize embeddings to calculate cosine similarity via dot product
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        
+        # Compute the cosine similarity matrix
+        # Resulting shape: (batch_size, batch_size)
+        similarity_matrix = torch.matmul(embeddings, embeddings.T) / self.temperature
+        
+        # Create the mask for positive pairs based on labels
+        # Reshape labels to (batch_size, 1) to compare every label with every other label
+        labels = labels.contiguous().view(-1, 1)
+        # mask[i, j] = 1 if labels[i] == labels[j], else 0
+        mask = torch.eq(labels, labels.T).float()
+        
+        # Remove self-comparisons
+        # The model shouldn't get "free points" for matching an item to itself
+        logits_mask = torch.ones_like(mask).fill_diagonal_(0)
+        mask = mask * logits_mask
+        
+        # Numerical Stability Trick
+        # Subtract the max similarity in each row to prevent exploding exponentials
+        sim_max, _ = torch.max(similarity_matrix, dim=1, keepdim=True)
+        logits = similarity_matrix - sim_max.detach()
+        
+        # Compute log probabilities
+        # Mask out self-comparisons from the denominator sum
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(dim=1, keepdim=True) + 1e-9)
+        
+        # Compute the mean log-likelihood for positive pairs
+        # Find how many positive pairs exist for each item in the batch
+        mask_sum = mask.sum(dim=1)
+        
+        # Edge case: If a transaction is the ONLY one of its class in the batch (e.g., 1 Fraud),
+        # prevent division by zero by setting its sum to 1. 
+        mask_sum = torch.where(mask_sum == 0, torch.ones_like(mask_sum), mask_sum)
+        
+        # Multiply log_prob by the mask to only keep scores for positive pairs,
+        # sum them up, and divide by the number of positives.
+        mean_log_prob_pos = (mask * log_prob).sum(dim=1) / mask_sum
+        
+        # 8. Final loss is the negative mean over the entire batch
+        loss = -mean_log_prob_pos.mean()
+        
         return loss

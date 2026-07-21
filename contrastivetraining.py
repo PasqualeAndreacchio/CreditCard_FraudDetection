@@ -8,10 +8,9 @@ import torch.optim as optim
 from imblearn.over_sampling import SMOTE
 
 from src.Datasets.datasets import ContrastiveDataset
-from src.models.AttentionEncoder import Encoder, ContrastiveHead, InputEmbedding
-from src.Datasets.preprocess import Preprocessing
+from src.models.AttentionEncoder import ContrastiveModel
 
-from src.utils import TripletNTXentLoss
+from src.utils import SupervisedContrastiveLoss
 
 
 data = pd.read_csv("data/creditcard.csv")
@@ -23,19 +22,14 @@ smotedata = pd.concat([X, y], axis=1)
 dataset = ContrastiveDataset(df = smotedata)
 loader = DataLoader(
     dataset=dataset, 
-    batch_size=512, 
+    batch_size=1024, 
     shuffle=True
 )
 
-model = nn.Sequential(
-    InputEmbedding(d_embed=64),
-    Encoder(d_embed=64, d_ff=64, num_heads=4, dropout=0.1),
-    Encoder(d_embed=64, d_ff=64, num_heads=4, dropout=0.1), 
-    ContrastiveHead(dim_in=64, dim_out=64, p_drop=0.1)
-)   
+model = ContrastiveModel()
 
 
-criterion = TripletNTXentLoss(temperature=0.1)
+criterion = SupervisedContrastiveLoss(temperature=0.1)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 # Training Loop
@@ -44,17 +38,15 @@ for epoch in range(epochs):
     model.train()
     total_loss = 0
     
-    for batch_idx, (sample, pos, neg) in enumerate(loader):
+    for batch_idx, (sample, label) in enumerate(loader):
         # Zero gradients
         optimizer.zero_grad()
         
         # Forward pass
-        out_sample = model(sample)
-        out_pos = model(pos)
-        out_neg = model(neg)
+        embedded = model(sample)
         
         # Compute NT-Xent Loss
-        loss = criterion(out_sample, out_pos, out_neg)
+        loss = criterion(embedded,label)
         
         # Backward pass and optimization
         loss.backward()

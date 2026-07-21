@@ -143,13 +143,43 @@ class ContrastiveHead(nn.Module):
             nn.Dropout(p=p_drop)
         )
 
-        self.pooling = MeanPooling()
-
-        
     def forward(self, x):
         out1 = self.layer1(x)
-        out2 = self.layer2(out1)
-
-        out = self.pooling(out2)
+        out = self.layer2(out1)
 
         return out
+    
+    
+class ContrastiveModel(nn.Module):
+    def __init__(self, d_embed=128, d_ff=512, num_heads=8, dropout=0.1, dim_out=64):
+        super().__init__()
+        # 1. Embeddings
+        self.embedding = InputEmbedding(d_embed=d_embed)
+        
+        # 2. Attention Encoder (Increased capacity)
+        self.encoder = Encoder(
+            d_embed=d_embed, 
+            d_ff=d_ff,           # Usually 4x d_embed
+            num_heads=num_heads, 
+            dropout=dropout
+        )
+        
+        # 3. Pooling (Collapses sequence dimension)
+        self.pooler = MeanPooling() # Or MeanPooling with masks
+        
+        # 4. Projection Head
+        self.head = ContrastiveHead(
+            dim_in=d_embed, 
+            dim_out=dim_out, 
+            p_drop=dropout
+        )
+
+    def forward(self, x):
+        # x: (batch_size, seq_len, input_dim)
+        
+        x = self.embedding(x)        # -> (batch, seq_len, d_embed)
+        x = self.encoder(x)          # -> (batch, seq_len, d_embed)
+        x = self.pooler(x)           # -> (batch, d_embed)
+        x = self.head(x)             # -> (batch, dim_out)
+        
+        return x
