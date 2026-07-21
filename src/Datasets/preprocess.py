@@ -65,19 +65,20 @@ class Preprocessing:
 
     @overload
     def get_dataset(
-        self, test_size: float = 0.2, val_size: None = None, random_state: int = 42
+        self, test_size: float = 0.2, val_size: None = None, random_state: int = 42, autoencoder: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     @overload
     def get_dataset(
-        self, test_size: float, val_size: float, random_state: int = 42
+        self, test_size: float, val_size: float, random_state: int = 42, autoencoder: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
 
     def get_dataset(
         self, 
         test_size: float = 0.2, 
         val_size: Optional[float] = None, 
-        random_state: int = 42
+        random_state: int = 42,
+        autoencoder: bool = True
     ) -> Tuple:
         """
         Returns the preprocessed dataset split into training and test sets, with features already scaled.
@@ -93,18 +94,44 @@ class Preprocessing:
         """
 
         split =  self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
-        X_train, X_test, y_train, y_test = split
+        
+        if not val_size:
+            X_train, X_test, y_train, y_test = split
+        else:
+            X_train, X_val, X_test, y_train, y_val, y_test = split
 
-        X_train_tensor = torch.tensor(X_train.to_numpy(), dtype=torch.float32)
-        X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-        y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.long)
-        y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
+        
+        if not autoencoder:
+            X_train_tensor = torch.tensor(X_train.to_numpy(), dtype=torch.float32)
+            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
+            y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.long)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
+        
+            if not val_size:
+                return X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor
+            else:
+                X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
+                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
+                return X_train_tensor, X_val_tensor, X_test_tensor, y_train_tensor, y_val_tensor, y_test_tensor
+                
+        
+        else:
+            
+            train_normal_mask = (y_train == 0)
+            X_train_normal = X_train[train_normal_mask]
 
-        # One-hot configuration for softmax output
-        y_train_tensor_onehot = F.one_hot(y_train_tensor, 2).float()
-        y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
+            X_train_tensor = torch.tensor(X_train_normal.to_numpy(), dtype=torch.float32)
+            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
+            
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
 
-        return X_train_tensor, X_test_tensor, y_train_tensor_onehot, y_test_tensor_onehot
+            if not val_size:
+                return X_train_tensor, X_test_tensor, y_test_tensor
+            else:
+                X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
+                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
+                return X_train_tensor, X_val_tensor, X_test_tensor, y_val_tensor, y_test_tensor
+
     
 
     @overload

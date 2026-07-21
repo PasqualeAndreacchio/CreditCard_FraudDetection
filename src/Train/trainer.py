@@ -24,7 +24,7 @@ from sklearn.metrics import f1_score as sklearn_f1, precision_recall_curve
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models.Model import Complete_Autoencoder
+from src.models.Autoencoder import FraudAutoencoder
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Complete_Autoencoder,
+        model: FraudAutoencoder,
         config: dict[str, Any],
         class_weight: torch.Tensor | None = None,
     ) -> None:
@@ -279,7 +279,7 @@ class Trainer:
 
             if is_better:
                 best_metric = metric_value
-                checkpoint_name = self.config["paths"].get("checkpoint_name", "model_best.pt")
+                checkpoint_name = self.config["paths"].get("checkpoint_name", "model_best_new.pt")
                 self.save_checkpoint(
                     os.path.join(self.checkpoint_dir, checkpoint_name),
                     epoch=epoch,
@@ -413,14 +413,11 @@ class Trainer:
     ) -> float:
         """Compute the F1-optimal score on the validation set.
 
-        Collects full fraud probability scores, finds the threshold that
-        maximises F1 via the precision-recall curve (same algorithm used
-        by the final evaluator), and returns that F1 value.
-
-        Using the optimal threshold — instead of a fixed 0.5 — is essential
-        because the model outputs fraud probabilities that are extremely small
-        (near 0) for all samples.  A fixed 0.5 threshold would classify
-        everything as Normal, giving a meaningless F1 ≈ 0 for checkpointing.
+        Dynamically computes the correct anomaly score based on the task:
+        - Classification: Uses the softmax probability of the positive class.
+        - Reconstruction: Uses the Mean Squared Error (MSE) per sample.
+        
+        It then finds the threshold that maximises F1 via the precision-recall curve.
 
         Args:
             loader: Validation DataLoader.
@@ -436,8 +433,22 @@ class Trainer:
             x = batch[0] if isinstance(batch, (list, tuple)) else batch
             x = x.to(self.device)
             outputs = self.model(x)
-            probs = torch.softmax(outputs, dim=1)
-            all_scores.extend(probs[:, 1].cpu().numpy().tolist())
+            
+            if self.task == "classification":
+                # Score is the probability of the Fraud class (Class 1)
+                probs = torch.softmax(outputs, dim=1)
+                scores = probs[:, 1].cpu().numpy().tolist()
+                
+            elif self.task == "reconstruction":
+                # Score is the Reconstruction Error (MSE) per individual sample
+                # Calculate squared difference, then mean across the feature dimension (dim=1)
+                mse_per_sample = torch.mean((outputs - x) ** 2, dim=1)
+                scores = mse_per_sample.cpu().numpy().tolist()
+                
+            else:
+                raise ValueError(f"The task '{self.task}' is not implemented")
+                
+            all_scores.extend(scores)
 
         scores = np.array(all_scores)
 

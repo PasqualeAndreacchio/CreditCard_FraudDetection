@@ -21,7 +21,7 @@ model:
     activation: "relu"
     dropout: 0.1
     batch_norm: True
-  task: "classification"           # "classification" or "reconstruction"
+  task: "reconstruction"           # "classification" or "reconstruction"
 
 # ─── DataLoaders ───────────────────────────────────────────────────────────────
 batch_size: 512                    # Mini-batch size
@@ -37,14 +37,14 @@ training:
   optimizer: "adam"                   # Optimizer: adam | adamw | sgd
   scheduler:
     type: "none"        # LR scheduler: reduce_on_plateau | cosine | step | none
-    patience: 10                     # Epochs to wait before reducing LR (reduce_on_plateau)
+    patience: 20                     # Epochs to wait before reducing LR (reduce_on_plateau)
     factor: 0.5                      # LR reduction factor
     step_size: 30                    # Step size for StepLR scheduler
   early_stopping:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
     min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "ce"                        # Reconstruction loss: mse | mae | huber | bce | ce
+  loss: "mse"                        # Reconstruction loss: mse | mae | huber | bce | ce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────
 anomaly:

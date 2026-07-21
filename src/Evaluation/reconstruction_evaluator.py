@@ -40,7 +40,7 @@ from sklearn.metrics import (
 
 import matplotlib.pyplot as plt
 
-from src.models.FFNNDecoder import FFNNAutoencoder
+from src.models.Autoencoder import FraudAutoencoder
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class ReconstructionEvaluator:
 
     def __init__(
         self,
-        model: FFNNAutoencoder,
+        model: FraudAutoencoder,
         config: dict[str, Any],
         device: torch.device,
     ) -> None:
@@ -81,17 +81,9 @@ class ReconstructionEvaluator:
 
     @torch.no_grad()
     def compute_anomaly_scores(self, loader: DataLoader) -> np.ndarray:
-        """Compute per-sample reconstruction error (MSE) for all data.
-
-        Args:
-            loader: DataLoader yielding feature tensors (or (features, labels)
-                tuples — labels are ignored).
-
-        Returns:
-            1-D numpy array of reconstruction errors, one per sample.
-        """
+        """Compute per-sample reconstruction error (MSE) for all data."""
         self.model.eval()
-        all_errors: list[torch.Tensor] = []
+        all_errors: list[float] = []
 
         for batch in loader:
             if isinstance(batch, (list, tuple)):
@@ -100,10 +92,17 @@ class ReconstructionEvaluator:
                 x = batch
 
             x = x.to(self.device)
-            errors = self.model.compute_reconstruction_error(x, reduction="mean")
-            all_errors.append(errors.cpu())
+            
+            # 1. Get the reconstructed output from the forward pass
+            reconstructed = self.model(x)
+            
+            # 2. Calculate the MSE per sample manually
+            mse_per_sample = torch.mean((reconstructed - x) ** 2, dim=1)
+            
+            # 3. Store the errors
+            all_errors.extend(mse_per_sample.cpu().numpy().tolist())
 
-        return torch.cat(all_errors).numpy()
+        return np.array(all_errors)
 
     # ── Threshold Determination ─────────────────────────────────────────
 

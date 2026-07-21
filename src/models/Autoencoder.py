@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
+import yaml
 
 class FraudAutoencoder(nn.Module):
-    def __init__(self, input_dim=29):
+    def __init__(self,input_dim=30):
         super().__init__()
         
         # 1. The Encoder (Compresses data)
