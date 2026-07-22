@@ -66,19 +66,11 @@ class ContrastiveModel(nn.Module):
 
 
 class FraudAutoencoder(nn.Module):
-    def __init__(self,input_dim=30):
+    def __init__(self, encoder_module: nn.Module, input_dim=30):
         super().__init__()
         
-        # 1. The Encoder (Compresses data)
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 24),
-            nn.Tanh(),
-            nn.Linear(24, 16),
-            nn.Tanh(),
-            # The bottleneck (Latent space)
-            nn.Linear(16, 8), 
-            nn.ReLU()
-        )
+        # 1. Use the provided, pre-trained encoder
+        self.encoder = encoder_module
         
         # 2. The Decoder (Reconstructs data)
         self.decoder = nn.Sequential(
@@ -86,7 +78,6 @@ class FraudAutoencoder(nn.Module):
             nn.Tanh(),
             nn.Linear(16, 24),
             nn.Tanh(),
-            # Output layer matches input dimensions
             nn.Linear(24, input_dim) 
         )
 
