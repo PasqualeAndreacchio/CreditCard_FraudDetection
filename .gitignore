@@ -10,3 +10,6 @@ plots/ffnn_*
 *.pth
 results
 *references/
+
+graphify-out/
+.agents
