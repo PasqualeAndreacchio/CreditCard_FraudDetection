@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 
 import json
@@ -68,7 +69,7 @@ class ReconstructionEvaluator:
 
     def __init__(
         self,
-        model: FraudAutoencoder,
+        model: nn.Module,
         config: dict[str, Any],
         device: torch.device,
     ) -> None:
@@ -96,8 +97,8 @@ class ReconstructionEvaluator:
             # 1. Get the reconstructed output from the forward pass
             reconstructed = self.model(x)
             
-            # 2. Calculate the MSE per sample manually
-            mse_per_sample = torch.mean((reconstructed - x) ** 2, dim=1)
+            # 2. Calculate the MSE per sample manually across all feature/sequence dimensions
+            mse_per_sample = torch.mean((reconstructed - x) ** 2, dim=tuple(range(1, x.ndim)))
             
             # 3. Store the errors
             all_errors.extend(mse_per_sample.cpu().numpy().tolist())

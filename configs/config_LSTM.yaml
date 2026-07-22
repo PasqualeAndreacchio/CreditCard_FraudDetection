@@ -1,0 +1,60 @@
+# ============================================================================
+#  LSTM Autoencoder — Configuration
+#  Credit Card Fraud Detection (Anomaly Detection)
+# ============================================================================
+
+# ─── Model Architecture ─────────────────────────────────────────────────────
+model:
+  task: "reconstruction"           # "classification" or "reconstruction"
+
+lstm_model:
+  input_dim: 30                    # Number of features per timestep
+  hidden_dim: 64                   # Hidden state dimension in LSTM layers
+  latent_dim: 16                   # Latent bottleneck dimension
+  num_layers: 2                    # Stacked LSTM layers
+  dropout: 0.2                     # Dropout probability
+
+sequence:
+  seq_len: 10                      # Timesteps per sequence window
+  stride: 1                        # Sliding window stride
+  only_normal: true                # Train on normal (non-fraud) transactions only
+
+# ─── DataLoaders ───────────────────────────────────────────────────────────────
+batch_size: 512                    # Mini-batch size
+test_size: 0.2                     # Fraction of samples for the test set
+val_size: 0                        # Fraction of samples for the validation set
+
+# ─── Training ───────────────────────────────────────────────────────────────
+training:
+  epochs: 50                       # Maximum number of training epochs
+  learning_rate: 0.001             # Initial learning rate
+  weight_decay: 0.0001             # L2 regularization
+  optimizer: "adam"                # Optimizer: adam | adamw | sgd
+  scheduler:
+    type: "none"                   # LR scheduler: reduce_on_plateau | cosine | step | none
+    patience: 10
+    factor: 0.5
+  early_stopping:
+    enabled: true                  # Enable early stopping
+    patience: 10                   # Epochs without improvement before stopping
+    min_delta: 0.00001
+  loss: "mse"                      # Reconstruction loss: mse | mae | huber
+
+# ─── Anomaly Detection ──────────────────────────────────────────────────────
+anomaly:
+  threshold_method: "f1_optimal"   # Method: percentile | mean_std | f1_optimal
+  percentile: 95
+  std_multiplier: 2.0
+  plots_dir: "plots/lstmPROVA"
+  results_dir: "results/lstmPROVA"
+
+# ─── Paths ───────────────────────────────────────────────────────────────────
+paths:
+  data_dir: "data/"
+  checkpoint_dir: "checkpoints/lstmPROVA"
+  checkpoint_name: "lstm_autoencoder_best.pt"
+  log_dir: "logs/lstmPROVA"
+
+# ─── Reproducibility ────────────────────────────────────────────────────────
+seed: 42
+device: "cpu"                      # cpu or cuda
