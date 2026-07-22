@@ -230,6 +230,109 @@ class Preprocessing:
         return self._calculate_class_weights(y_train, verbose=verbose)    
 
 
+    @overload
+    def get_sequence_dataset(
+        self,
+        seq_len: int = 10,
+        stride: int = 1,
+        test_size: float = 0.2,
+        val_size: None = None,
+        random_state: int = 42,
+        autoencoder: bool = True,
+        only_normal: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: ...
+
+    @overload
+    def get_sequence_dataset(
+        self,
+        seq_len: int = 10,
+        stride: int = 1,
+        test_size: float = 0.2,
+        val_size: float = 0.2,
+        random_state: int = 42,
+        autoencoder: bool = True,
+        only_normal: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
+
+    def get_sequence_dataset(
+        self,
+        seq_len: int = 10,
+        stride: int = 1,
+        test_size: float = 0.2,
+        val_size: Optional[float] = None,
+        random_state: int = 42,
+        autoencoder: bool = True,
+        only_normal: bool = True,
+    ) -> Tuple:
+        """
+        Generates sequence-based datasets (3D PyTorch Tensors) using a sliding window for sequence models (e.g., LSTM Autoencoder).
+        Args:
+            seq_len (int): Length of each sliding window sequence (number of timesteps). Default is 10.
+            stride (int): Step size for the sliding window. Default is 1.
+            test_size (float): Proportion of the dataset to include in the test split. Default is 0.2.
+            val_size (float, optional): Proportion of the dataset to include in the validation split. Default is None.
+            random_state (int): Random seed for reproducibility. Default is 42.
+            autoencoder (bool): If True, returns target formats suitable for Autoencoder reconstruction (unsupervised training).
+            only_normal (bool): If True (and autoencoder=True), filters the training set to include ONLY non-fraudulent (normal, y=0) transactions.
+                                If False, trains on all training transactions (normal + fraud). Default is True.
+        Returns:
+            - If val_size is None and autoencoder=True: X_train_seq, X_test_seq, y_test_seq
+            - If val_size is given and autoencoder=True: X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
+            - If autoencoder=False: X_train_seq, X_test_seq, y_train_seq, y_test_seq
+        """
+        if seq_len <= 0:
+            raise ValueError(f"seq_len must be a positive integer, got {seq_len}")
+        if stride <= 0:
+            raise ValueError(f"stride must be a positive integer, got {stride}")
+
+        split = self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
+
+        def _create_sequences(df_x: pd.DataFrame, series_y: Optional[pd.Series] = None):
+            x_tensor = torch.tensor(df_x.to_numpy(), dtype=torch.float32)
+            if len(x_tensor) < seq_len:
+                raise ValueError(f"Dataset size ({len(x_tensor)}) is smaller than seq_len ({seq_len}).")
+            
+            # Form 3D sequences: (num_sequences, seq_len, num_features)
+            x_seq = x_tensor.unfold(0, seq_len, stride).permute(0, 2, 1)
+
+            if series_y is not None:
+                y_tensor = torch.tensor(series_y.to_numpy(), dtype=torch.long)
+                y_seq = y_tensor[seq_len - 1 :: stride][: len(x_seq)]
+                return x_seq, y_seq
+
+            return x_seq
+
+        if not val_size:
+            X_train, X_test, y_train, y_test = split
+        else:
+            X_train, X_val, X_test, y_train, y_val, y_test = split
+
+        if autoencoder:
+            if only_normal:
+                X_train_data = X_train[y_train == 0]
+            else:
+                X_train_data = X_train
+
+            X_train_seq = _create_sequences(X_train_data)
+            X_test_seq, y_test_seq = _create_sequences(X_test, y_test)
+
+            if not val_size:
+                return X_train_seq, X_test_seq, y_test_seq
+            else:
+                X_val_seq, y_val_seq = _create_sequences(X_val, y_val)
+                return X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
+        else:
+            X_train_seq, y_train_seq = _create_sequences(X_train, y_train)
+            X_test_seq, y_test_seq = _create_sequences(X_test, y_test)
+
+            if not val_size:
+                return X_train_seq, X_test_seq, y_train_seq, y_test_seq
+            else:
+                X_val_seq, y_val_seq = _create_sequences(X_val, y_val)
+                return X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
+
+
+
     @staticmethod
     def _remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
         """
