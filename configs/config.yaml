@@ -44,7 +44,7 @@ training:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
     min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "mse"                        # Reconstruction loss: mse | mae | huber | bce | ce
+  loss: "huber"                        # Reconstruction loss: mse | mae | huber | bce | ce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────
 anomaly:
