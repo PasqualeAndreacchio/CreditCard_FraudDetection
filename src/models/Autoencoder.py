@@ -13,9 +13,8 @@ class FraudAutoencoder(nn.Module):
             nn.Linear(24, 16),
             nn.Tanh(),
             # The bottleneck (Latent space)
-            nn.Linear(16, 16),
-            nn.Tanh(),
-            nn.Linear(16, 8) 
+            nn.Linear(16, 8), 
+            nn.ReLU()
         )
         
         # 2. The Decoder (Reconstructs data)
