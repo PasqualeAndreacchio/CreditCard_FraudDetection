@@ -122,7 +122,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: FraudAutoencoder,
+        model: nn.Module,
         config: dict[str, Any],
         class_weight: torch.Tensor | None = None,
     ) -> None:
@@ -440,9 +440,9 @@ class Trainer:
                 scores = probs[:, 1].cpu().numpy().tolist()
                 
             elif self.task == "reconstruction":
-                # Score is the Reconstruction Error (MSE) per individual sample
-                # Calculate squared difference, then mean across the feature dimension (dim=1)
-                mse_per_sample = torch.mean((outputs - x) ** 2, dim=1)
+                # Score is the Reconstruction Error (MSE) per individual sample.
+                # Average across all dimensions except the batch dimension (dim 0).
+                mse_per_sample = torch.mean((outputs - x) ** 2, dim=tuple(range(1, x.ndim)))
                 scores = mse_per_sample.cpu().numpy().tolist()
                 
             else:
