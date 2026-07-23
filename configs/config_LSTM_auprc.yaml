@@ -3,9 +3,9 @@ model:
 lstm_model:
   input_dim: 30
   hidden_dim: 64
-  latent_dim: 8
+  latent_dim: 12
   num_layers: 1
-  dropout: 0.25
+  dropout: 0.15000000000000002
 sequence:
   seq_len: 3
   stride: 1
@@ -17,9 +17,10 @@ test_size: 0.2
 val_size: 0.15
 training:
   epochs: 100
-  learning_rate: 0.0007437630164903287
-  weight_decay: 0.00029690750670353103
+  learning_rate: 0.0015352263184455369
+  weight_decay: 0.0009644949180417984
   optimizer: adamw
+  val_metric: auprc
   scheduler:
     type: reduce_on_plateau
     patience: 5
@@ -33,12 +34,12 @@ anomaly:
   threshold_method: f1_optimal
   percentile: 95
   std_multiplier: 2.0
-  plots_dir: plots/lstm
-  results_dir: results/lstm
+  plots_dir: plots/lstm_auprc
+  results_dir: results/lstm_auprc
 paths:
   data_dir: data/
-  checkpoint_dir: checkpoints/lstm
+  checkpoint_dir: checkpoints/lstm_auprc
   checkpoint_name: lstm_autoencoder_best.pt
-  log_dir: logs/lstm
+  log_dir: logs/lstm_auprc
 seed: 42
 device: cpu

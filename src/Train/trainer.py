@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score as sklearn_f1, precision_recall_curve
+from sklearn.metrics import f1_score as sklearn_f1, precision_recall_curve, average_precision_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -165,6 +165,7 @@ class Trainer:
             "train_loss": [],
             "val_loss": [],
             "val_f1": [],
+            "val_auprc": [],
             "lr": [],
         }
 
@@ -242,14 +243,16 @@ class Trainer:
         """
         epochs = self.config["training"]["epochs"]
         val_metric = self.config["training"].get("val_metric", "loss")
+        use_auprc = (val_metric == "auprc" and val_labels is not None)
         use_f1 = (val_metric == "f1" and val_labels is not None)
+        use_custom_metric = use_auprc or use_f1
 
-        # For F1 metric: higher is better. For loss: lower is better.
-        best_metric = 0.0 if use_f1 else float("inf")
+        # Higher is better for AUPRC and F1. Lower is better for loss.
+        best_metric = 0.0 if use_custom_metric else float("inf")
 
         logger.info(
             "Starting training for up to %d epochs (checkpointing on %s).",
-            epochs, "val_f1" if use_f1 else "val_loss",
+            epochs, val_metric if use_custom_metric else "val_loss",
         )
         t_start = time.time()
 
@@ -260,22 +263,37 @@ class Trainer:
             # ── Validate ────────────────────────────────────────────────────
             val_loss = self._validate_epoch(val_loader)
             val_f1 = self._compute_val_f1(val_loader, val_labels) if use_f1 else 0.0
+            val_auprc = self._compute_val_auprc(val_loader, val_labels) if use_auprc else 0.0
 
             # ── Record ──────────────────────────────────────────────────────
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.history["train_loss"].append(train_loss)
             self.history["val_loss"].append(val_loss)
             self.history["val_f1"].append(val_f1)
+            self.history["val_auprc"].append(val_auprc)
             self.history["lr"].append(current_lr)
 
-            logger.info(
-                "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  val_f1=%.4f  |  lr=%.2e",
-                epoch, epochs, train_loss, val_loss, val_f1, current_lr,
-            )
+            if use_auprc:
+                metric_value = val_auprc
+                logger.info(
+                    "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  val_auprc=%.4f  |  lr=%.2e",
+                    epoch, epochs, train_loss, val_loss, val_auprc, current_lr,
+                )
+            elif use_f1:
+                metric_value = val_f1
+                logger.info(
+                    "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  val_f1=%.4f  |  lr=%.2e",
+                    epoch, epochs, train_loss, val_loss, val_f1, current_lr,
+                )
+            else:
+                metric_value = val_loss
+                logger.info(
+                    "Epoch %3d/%d  |  train_loss=%.6f  |  val_loss=%.6f  |  lr=%.2e",
+                    epoch, epochs, train_loss, val_loss, current_lr,
+                )
 
             # ── Checkpointing ───────────────────────────────────────────────
-            metric_value = val_f1 if use_f1 else val_loss
-            is_better = (metric_value > best_metric) if use_f1 else (metric_value < best_metric)
+            is_better = (metric_value > best_metric) if use_custom_metric else (metric_value < best_metric)
 
             if is_better:
                 best_metric = metric_value
@@ -287,7 +305,7 @@ class Trainer:
                 )
                 logger.info(
                     "  ↳ Best model saved (%s=%.4f).",
-                    "val_f1" if use_f1 else "val_loss", best_metric,
+                    val_metric if use_custom_metric else "val_loss", best_metric,
                 )
 
             # ── Scheduler Step (sempre su val_loss) ──────────────────────────
@@ -301,9 +319,7 @@ class Trainer:
 
             # ── Early Stopping ──────────────────────────────────────
             if self.early_stopping is not None:
-                # Per F1 (higher=better), passiamo il negativo all'EarlyStopping
-                # che internamente cerca un valore decrescente
-                es_value = -val_f1 if use_f1 else val_loss
+                es_value = -metric_value if use_custom_metric else val_loss
                 if self.early_stopping.step(es_value):
                     logger.info("Training stopped early at epoch %d.", epoch)
                     break
@@ -312,7 +328,7 @@ class Trainer:
         logger.info(
             "Training complete in %.1f s.  Best %s=%.4f",
             elapsed,
-            "val_f1" if use_f1 else "val_loss",
+            val_metric if use_custom_metric else "val_loss",
             best_metric,
         )
         return self.history
@@ -450,19 +466,57 @@ class Trainer:
                 
             all_scores.extend(scores)
 
-        scores = np.array(all_scores)
+        scores = np.asarray(all_scores, dtype=np.float64).flatten()
+        labels = (np.asarray(labels).flatten() > 0).astype(np.int32)
+
+        unique = np.unique(labels)
+        if len(unique) < 2:
+            return 0.0
 
         # Find the threshold that maximises F1 on the validation set
-        precisions, recalls, thresholds = precision_recall_curve(labels, scores)
+        precisions, recalls, thresholds = precision_recall_curve(labels, scores, pos_label=1)
         with np.errstate(divide="ignore", invalid="ignore"):
             f1_values = 2 * precisions * recalls / (precisions + recalls)
-        f1_values = np.nan_to_num(f1_values)
+        f1_scores = np.nan_to_num(f1_values)
 
-        best_idx = int(np.argmax(f1_values))
+        best_idx = int(np.argmax(f1_scores))
         best_threshold = float(thresholds[min(best_idx, len(thresholds) - 1)])
         preds = (scores > best_threshold).astype(int)
 
         return float(sklearn_f1(labels, preds, zero_division=0))
+
+    @torch.no_grad()
+    def _compute_val_auprc(
+        self, loader: DataLoader, labels: np.ndarray
+    ) -> float:
+        """Compute the AUPRC (Average Precision) score on the validation set."""
+        self.model.eval()
+        all_scores: list[float] = []
+
+        for batch in loader:
+            x = batch[0] if isinstance(batch, (list, tuple)) else batch
+            x = x.to(self.device)
+            outputs = self.model(x)
+
+            if self.task == "classification":
+                probs = torch.softmax(outputs, dim=1)
+                scores = probs[:, 1].cpu().numpy().tolist()
+            elif self.task == "reconstruction":
+                mse_per_sample = torch.mean((outputs - x) ** 2, dim=tuple(range(1, x.ndim)))
+                scores = mse_per_sample.cpu().numpy().tolist()
+            else:
+                raise ValueError(f"The task '{self.task}' is not implemented")
+
+            all_scores.extend(scores)
+
+        scores = np.asarray(all_scores, dtype=np.float64).flatten()
+        labels = (np.asarray(labels).flatten() > 0).astype(np.int32)
+
+        unique = np.unique(labels)
+        if len(unique) < 2:
+            return 0.0
+
+        return float(average_precision_score(labels, scores, pos_label=1))
 
     # ── Checkpointing ──────────────────────────────────────────────────────
 

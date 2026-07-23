@@ -194,6 +194,8 @@ class ReconstructionEvaluator:
             labels: Ground-truth binary labels (0/1).
             threshold: Override anomaly threshold (optional).
         """
+        # Ensure labels and scores are flat 1D arrays
+        labels = np.asarray(labels).flatten().astype(int)
         scores = self.compute_anomaly_scores(loader)
 
         if threshold is None:
@@ -206,8 +208,8 @@ class ReconstructionEvaluator:
         f1 = float(f1_score(labels, predictions, zero_division=0))
         auprc = float(average_precision_score(labels, scores))
         auroc = float(roc_auc_score(labels, scores))
-        cm = confusion_matrix(labels, predictions)
-        report = classification_report(labels, predictions, target_names=["Normal", "Fraud"])
+        cm = confusion_matrix(labels, predictions, labels=[0, 1])
+        report = classification_report(labels, predictions, labels=[0, 1], target_names=["Normal", "Fraud"], zero_division=0)
 
         metrics = {
             "threshold": threshold,
@@ -283,32 +285,34 @@ class ReconstructionEvaluator:
         fraud_scores = scores[labels == 1]
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(normal_scores, bins=100, alpha=0.6, label="Normal", color="#3498db", density=True)
-        ax.hist(fraud_scores, bins=100, alpha=0.6, label="Fraud", color="#e74c3c", density=True)
+        if len(normal_scores) > 0:
+            ax.hist(normal_scores, bins=100, alpha=0.6, label="Normal", color="#3498db", density=True)
+        if len(fraud_scores) > 0:
+            ax.hist(fraud_scores, bins=100, alpha=0.6, label="Fraud", color="#e74c3c", density=True)
         ax.axvline(threshold, color="#2ecc71", linestyle="--", linewidth=2, label=f"Threshold = {threshold:.4f}")
         ax.set_xlabel("Reconstruction Error (MSE)")
         ax.set_ylabel("Density")
-        ax.set_title("FFNN Autoencoder — Reconstruction Error Distribution")
+        ax.set_title("Reconstruction Error Distribution")
         ax.legend()
         plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, "ffnn_error_distribution.png"), dpi=300)
+        plt.savefig(os.path.join(save_dir, "error_distribution.png"), dpi=300)
         plt.close()
-        logger.info("Saved: %s", os.path.join(save_dir, "ffnn_error_distribution.png"))
+        logger.info("Saved: %s", os.path.join(save_dir, "error_distribution.png"))
 
         # ── 2. Precision-Recall Curve (shared helper) ───────────────
         plot_precision_recall_curve(
             labels, scores,
             save_dir=save_dir,
-            filename="ffnn_precision_recall_curve.png",
-            title="FFNN Autoencoder — Precision-Recall Curve",
+            filename="precision_recall_curve.png",
+            title="Precision-Recall Curve",
         )
 
         # ── 3. Confusion Matrix (shared helper) ─────────────────────
         predictions = (scores > threshold).astype(np.int32)
-        cm = confusion_matrix(labels, predictions)
+        cm = confusion_matrix(labels, predictions, labels=[0, 1])
         plot_confusion_matrix(
             cm,
             save_dir=save_dir,
-            filename="ffnn_confusion_matrix.png",
-            title="FFNN Autoencoder — Confusion Matrix",
+            filename="confusion_matrix.png",
+            title="Confusion Matrix",
         )

@@ -39,7 +39,21 @@ def find_f1_optimal_threshold(scores: np.ndarray, labels: np.ndarray) -> float:
     Returns:
         Optimal threshold value.
     """
-    precisions, recalls, thresholds = precision_recall_curve(labels, scores)
+    # Ensure labels is a flat 1D binary integer array (guards against
+    # multi-dimensional tensors or float arrays that confuse sklearn)
+    labels = (np.asarray(labels).flatten() > 0).astype(np.int32)
+    scores = np.asarray(scores, dtype=np.float64).flatten()
+
+    unique = np.unique(labels)
+    if len(unique) < 2:
+        logger.warning(
+            "find_f1_optimal_threshold: labels contain only one class (%s). "
+            "Returning threshold=0.0 with F1=0.",
+            unique,
+        )
+        return 0.0
+
+    precisions, recalls, thresholds = precision_recall_curve(labels, scores, pos_label=1)
     # F1 = 2 * P * R / (P + R)
     with np.errstate(divide="ignore", invalid="ignore"):
         f1_scores = 2 * precisions * recalls / (precisions + recalls)
@@ -73,18 +87,21 @@ def plot_confusion_matrix(
     """
     os.makedirs(save_dir, exist_ok=True)
 
+    if cm.shape != (2, 2):
+        cm_2x2 = np.zeros((2, 2), dtype=int)
+        cm_2x2[:min(cm.shape[0], 2), :min(cm.shape[1], 2)] = cm
+        cm = cm_2x2
+
     fig, ax = plt.subplots(figsize=(7, 6))
     im = ax.imshow(cm, interpolation="nearest", cmap="Blues")
     ax.figure.colorbar(im, ax=ax)
-    ax.set(
-        xticks=[0, 1],
-        yticks=[0, 1],
-        xticklabels=["Normal", "Fraud"],
-        yticklabels=["Normal", "Fraud"],
-        xlabel="Predicted",
-        ylabel="Actual",
-        title=title,
-    )
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(["Normal", "Fraud"])
+    ax.set_yticklabels(["Normal", "Fraud"])
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title(title)
     for i in range(2):
         for j in range(2):
             ax.text(
@@ -118,8 +135,11 @@ def plot_precision_recall_curve(
     """
     os.makedirs(save_dir, exist_ok=True)
 
-    precisions, recalls, _ = precision_recall_curve(labels, scores)
-    auprc = average_precision_score(labels, scores)
+    labels = (np.asarray(labels).flatten() > 0).astype(np.int32)
+    scores = np.asarray(scores, dtype=np.float64).flatten()
+
+    precisions, recalls, _ = precision_recall_curve(labels, scores, pos_label=1)
+    auprc = average_precision_score(labels, scores, pos_label=1)
     plot_title = (
         f"{title} (AUPRC = {auprc:.4f})"
         if title
