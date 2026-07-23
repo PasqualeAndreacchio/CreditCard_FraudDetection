@@ -139,10 +139,8 @@ def train_and_evaluate():
     fig, ax = plt.subplots(figsize=(6, 5))
     disp.plot(cmap="Blues", values_format="d", ax=ax)
     plt.title("Confusion Matrix")
-
-    # Now this will work
     plt.savefig(f"{output_dir}/ConfusionMatrix.png")
-    plt.show()
+    
 
     # Plot 2: Reconstruction Error Distribution
     plt.figure(figsize=(10, 6))
@@ -155,7 +153,7 @@ def train_and_evaluate():
     plt.legend()
     # Limit x-axis to 99.5th percentile to prevent extreme outliers from squishing the plot
     plt.xlim(0, np.percentile(all_errors, 99.5)) 
-    plt.savefig("results/Contrastive/ReconstructionError.png")
+    plt.savefig(f"{output_dir}/ReconstructionError.png")
 
     # Plot 3: ROC Curve
     fpr, tpr, _ = roc_curve(all_labels, all_errors)
@@ -168,7 +166,7 @@ def train_and_evaluate():
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic (ROC)')
     plt.legend(loc="lower right")
-    plt.savefig("results/Contrastive/ROC_Curve.png")
+    plt.savefig(f"{output_dir}/ROC_Curve.png")
 
 
 if __name__ == "__main__":

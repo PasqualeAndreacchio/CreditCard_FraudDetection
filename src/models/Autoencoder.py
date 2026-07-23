@@ -27,12 +27,13 @@ class Encoder(nn.Module):
         # 1. The Encoder (Compresses data)
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, 24),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(24, 16),
-            nn.Tanh(),
+            nn.ReLU(),
             # The bottleneck (Latent space)
-            nn.Linear(16, 8), 
-            nn.ReLU()
+            nn.Linear(16, 12), 
+            nn.ReLU(), 
+            nn.Linear(12, 8)   
         )
 
     def forward(self, x):
