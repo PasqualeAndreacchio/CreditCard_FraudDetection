@@ -13,7 +13,7 @@ import os
 
 # (Ensure your Encoder and FraudAutoencoder are defined here)
 
-def prepare_data(csv_path="data/creditcard.csv", drop_time=True):
+def prepare_data(csv_path="data/reconstruction.csv", drop_time=True):
     """Loads dataset and splits into train (normal only) and test (mixed)."""
     df = pd.read_csv(csv_path)
     

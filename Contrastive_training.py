@@ -1,10 +1,31 @@
 import torch
 import torch.nn as nn
+import pandas as pd
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
 
 from src.models.Autoencoder import ContrastiveModel
 from src.Datasets.datasets import ContrastiveDataset
+
+originaldata = pd.read_csv("data/creditcard.csv")
+
+normalmask = originaldata["Class"] == 0
+fraudmask = originaldata["Class"] == 1
+
+normaldata = originaldata[normalmask]
+fraudata = originaldata[fraudmask]
+
+encoder_normal_df, decoder_normal_df = train_test_split(normaldata, test_size=0.5, random_state=42) 
+encoder_fraud_df, decoder_fraud_df = train_test_split(fraudata, test_size=0.5, random_state=42) 
+
+# FIX: Wrap the dataframes in a list []
+encoder_df = pd.concat([encoder_normal_df, encoder_fraud_df])
+decoder_df = pd.concat([decoder_normal_df, decoder_fraud_df])
+
+# FIX: Add index=False
+encoder_df.to_csv("data/contrastive.csv", index=False)
+decoder_df.to_csv("data/reconstruction.csv", index=False)
 
 # ─── TRAINING LOOP ───────────────────────────────────────────────────────
 
@@ -22,7 +43,7 @@ def train_contrastive_model():
     input_dim = 29 
 
     # Dataset and Dataloader (Updated initialization)
-    dataset = ContrastiveDataset(csv="data/creditcard.csv", drop_time=True)
+    dataset = ContrastiveDataset(csv="data/contrastive.csv", drop_time=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
     # Initialize the combined model
@@ -60,7 +81,7 @@ def train_contrastive_model():
             total_loss += loss.item()
 
         avg_loss = total_loss / len(loader)
-        print(f"Epoch [{epoch}/{epochs}] - Triplet Loss: {avg_loss:.4f}")
+        print(f"Epoch [{epoch}/{epochs}] - Triplet Loss: {avg_loss:.8f}")
 
     # Isolate and save ONLY the backbone encoder (discarding the contrastive head)
     print("Training complete. Extracting and saving the trained backbone...")
