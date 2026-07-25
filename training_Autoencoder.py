@@ -65,7 +65,8 @@ test_loader = DataLoader(
 
 
 # Model configuration and definition
-detector = FraudAutoencoder(input_dim=X_train_tensor.shape[1])
+# Architecture (input_dim, hidden_dims) is read from config['model'].
+detector = FraudAutoencoder(config=config)
 
 
 # Training configuration and definition
