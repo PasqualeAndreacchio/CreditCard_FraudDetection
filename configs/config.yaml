@@ -9,19 +9,16 @@
 
 # ─── Model Architecture ─────────────────────────────────────────────────────
 model:
-  encoder:
-    d_embed: 128            
-    d_ff: 64
-    num_heads: 4
-    dropout: 0.1
-  decoder:
-    latent_dim: 128
-    hidden_layers: [64, 32, 16, 8]
-    output_dim: 2
-    activation: "relu"
-    dropout: 0.1
-    batch_norm: True
-  task: "reconstruction"           # "classification" or "reconstruction"
+  # Number of input features (fixed by the credit card dataset).
+  input_dim: 29
+
+  # Encoder compression path: input_dim → hidden_dims[0] → ... → hidden_dims[-1].
+  # The last value is the bottleneck (latent space) dimension.
+  # The decoder is the exact mirror: hidden_dims[-1] → ... → hidden_dims[0] → input_dim.
+  # To make the network deeper, just add more values to this list.
+  hidden_dims: [24, 16, 8]
+
+  task: "reconstruction"           # "reconstruction" or "classification"
 
 # ─── DataLoaders ───────────────────────────────────────────────────────────────
 batch_size: 512                    # Mini-batch size
@@ -44,7 +41,7 @@ training:
     enabled: true                    # Enable early stopping
     patience: 10                     # Epochs without improvement before stopping
     min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "mse"                        # Reconstruction loss: mse | mae | huber | bce | ce
+  loss: "huber"                        # Reconstruction loss: mse | mae | huber | bce | ce
 
 # ─── Anomaly Detection ──────────────────────────────────────────────────────
 anomaly:

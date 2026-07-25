@@ -31,7 +31,7 @@ with open("configs/config.yaml", "r") as file:
 rawdata = pd.read_csv("data/creditcard.csv")
 
 # Preprocess
-preprocess = Preprocessing(rawdata)
+preprocess = Preprocessing(rawdata, drop_time=True)
 X_train_tensor, X_test_tensor, y_test_tensor = preprocess.get_dataset(test_size=0.2, autoencoder=True)
 
 # Transform the dataset into the right data type and format
@@ -65,7 +65,8 @@ test_loader = DataLoader(
 
 
 # Model configuration and definition
-detector = FraudAutoencoder(input_dim=X_train_tensor.shape[1])
+# Architecture (input_dim, hidden_dims) is read from config['model'].
+detector = FraudAutoencoder(config=config)
 
 
 # Training configuration and definition

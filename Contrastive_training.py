@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import pandas as pd
 import torch.optim as optim
+import yaml
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
@@ -33,21 +34,25 @@ def train_contrastive_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # Load the shared config so architecture is consistent with training_Autoencoder.py.
+    with open("configs/config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
     # Hyperparameters
-    batch_size = 256
+    batch_size = config.get("batch_size", 256)
     epochs = 20
     learning_rate = 1e-3
-    
-    # NOTE: If your new dataset drops both 'Class' and 'Time', the input dimension 
-    # will be 29. If it only drops 'Class', it will be 30. Adjust accordingly.
-    input_dim = 29 
+
+    # Architecture parameters — same list used by FraudAutoencoder.
+    input_dim   = config["model"]["input_dim"]
+    hidden_dims = config["model"]["hidden_dims"]
 
     # Dataset and Dataloader (Updated initialization)
     dataset = ContrastiveDataset(csv="data/contrastive.csv", drop_time=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
     # Initialize the combined model
-    model = ContrastiveModel(input_dim=input_dim).to(device)
+    model = ContrastiveModel(input_dim=input_dim, hidden_dims=hidden_dims).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     # Initialize Triplet Margin Loss (Replaces nt_xent_loss)
