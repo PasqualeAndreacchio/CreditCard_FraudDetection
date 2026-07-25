@@ -9,7 +9,7 @@ from sklearn.metrics import roc_auc_score, confusion_matrix, ConfusionMatrixDisp
 import matplotlib.pyplot as plt
 import seaborn as sns
 from src.models.Autoencoder import Encoder, FraudAutoencoder
-import os
+import os, yaml
 
 def train_and_evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,35 +19,44 @@ def train_and_evaluate():
     # Preprocessing handles: dedup/NaN cleaning, stratified split,
     # RobustScaler (fit on train only), and normal-only train filtering.
     # get_dataset(autoencoder=True) returns: X_train (normal only), X_test (all), y_test
-    df = pd.read_csv("data/creditcard.csv")
+    df = pd.read_csv("data/reconstruction.csv")
     preprocessor = Preprocessing(df, drop_time=True)
     X_train_tensor, X_test_tensor, y_test_tensor = preprocessor.get_dataset(
         test_size=0.2, random_state=42, autoencoder=True
     )
 
-    input_dim = X_train_tensor.shape[1]
-
-    train_loader = DataLoader(TensorDataset(X_train_tensor), batch_size=256, shuffle=True)
-    test_loader = DataLoader(TensorDataset(X_test_tensor, y_test_tensor), batch_size=256, shuffle=False)
+    with open("configs/config.yaml", "r") as f:
+            config = yaml.safe_load(f)
     
-    # 2. Load Pre-trained Encoder
-    encoder = Encoder(input_dim=input_dim)
+    # Hyperparameters
+    batch_size = config.get("batch_size", 256)
+    epochs = 200
+    learning_rate = 1e-3
+
+    # Architecture parameters — same list used by FraudAutoencoder.
+    input_dim   = config["model"]["input_dim"]
+    hidden_dims = config["model"]["hidden_dims"]
+
+    train_loader = DataLoader(TensorDataset(X_train_tensor), batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(TensorDataset(X_test_tensor, y_test_tensor), batch_size=batch_size, shuffle=False)
+    
+    
+    # 3. Initialize Autoencoder and load pre-trained encoder
+    model = FraudAutoencoder(config=config).to(device)
     try:
-        encoder.load_state_dict(torch.load("pretrained_tabular_encoder.pth", map_location=device, weights_only=True))
+        model.encoder.load_state_dict(torch.load("pretrained_tabular_encoder.pth", map_location=device, weights_only=True))
         print("Successfully loaded pre-trained encoder weights.")
     except FileNotFoundError:
         print("Pre-trained weights not found. Using randomly initialized encoder.")
         
-    for param in encoder.parameters():
+    for param in model.encoder.parameters():
         param.requires_grad = False
-        
-    # 3. Initialize Autoencoder
-    model = FraudAutoencoder(encoder_module=encoder, input_dim=input_dim).to(device)
-    optimizer = optim.Adam(model.decoder.parameters(), lr=1e-3)
-    criterion = nn.MSELoss()
+
+    # Optimizers
+    optimizer = optim.Adam(model.decoder.parameters(), lr=learning_rate)
+    criterion = nn.SmoothL1Loss()
     
     # 4. Training Loop (Decoder Only)
-    epochs = 300
     print("\n--- Starting Decoder Training ---")
     for epoch in range(1, epochs + 1):
         model.train()

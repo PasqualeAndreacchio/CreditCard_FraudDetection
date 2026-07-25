@@ -1,0 +1,35 @@
+model:
+  input_dim: 29
+  hidden_dims:
+  - 20
+  - 18
+  - 12
+  task: reconstruction
+batch_size: 256
+test_size: 0.2
+val_size: 0
+training:
+  epochs: 100
+  learning_rate: 0.00023270677083837802
+  weight_decay: 8.179499475211674e-06
+  optimizer: adam
+  scheduler:
+    type: none
+    patience: 20
+    factor: 0.5
+    step_size: 30
+  early_stopping:
+    enabled: true
+    patience: 10
+    min_delta: 1.0e-05
+  loss: mse
+anomaly:
+  threshold_method: f1_optimal
+  percentile: 95
+  std_multiplier: 2.0
+paths:
+  data_dir: data/
+  checkpoint_dir: checkpoints/
+  log_dir: logs/
+seed: 42
+device: cpu
