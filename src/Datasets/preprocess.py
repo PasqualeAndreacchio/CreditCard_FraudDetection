@@ -104,34 +104,35 @@ class Preprocessing:
         if not autoencoder:
             X_train_tensor = torch.tensor(X_train.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
-        
+            # Shape (N, 1) float — ready for BCEWithLogitsLoss
+            y_train_tensor = torch.tensor(y_train.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
+
             if not val_size:
                 return X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor
             else:
                 X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
+                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(1)
                 return X_train_tensor, X_val_tensor, X_test_tensor, y_train_tensor, y_val_tensor, y_test_tensor
                 
         
         else:
-            
+            # Autoencoder training uses only normal samples (unsupervised).
+            # Labels are only kept for the test set (anomaly detection evaluation).
             train_normal_mask = (y_train == 0)
             X_train_normal = X_train[train_normal_mask]
 
             X_train_tensor = torch.tensor(X_train_normal.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
+            # Shape (N, 1) float — ready for BCEWithLogitsLoss / evaluation
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
 
             if not val_size:
                 return X_train_tensor, X_test_tensor, y_test_tensor
             else:
                 X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
+                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(1)
                 return X_train_tensor, X_val_tensor, X_test_tensor, y_val_tensor, y_test_tensor
-
     
 
     @overload
@@ -151,8 +152,9 @@ class Preprocessing:
         random_state: int = 42,
     ) -> Tuple:
         """
-        This function applies SMOTE to the training set to balance the dataset.
-        val and test sets are left untouched (they must reflect the real class distribution).
+        Applies SMOTE to the training set to balance the dataset.
+        Val and test sets are left untouched (they must reflect the real class distribution).
+
         Args:
             - test_size (float): The proportion of the dataset to include in the test split.
             - val_size (float, optional): The proportion of the dataset to include in the validation split.
@@ -160,6 +162,7 @@ class Preprocessing:
             - random_state (int): The seed used by the random number generator.
         Returns:
             - If val_size is None: X_train_smote, X_test, y_train_smote, y_test
+                Labels are float tensors of shape (N, 1), compatible with BCEWithLogitsLoss.
             - If val_size is given: X_train_smote, X_val, X_test, y_train_smote, y_val, y_test
         """
         split = self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
@@ -168,36 +171,27 @@ class Preprocessing:
         if not val_size:
             X_train, X_test, y_train, y_test = split
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
-            
-            # Add .to_numpy() to the Pandas objects
+
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
-            
-            # One-hot configuration for softmax output
-            y_train_smote_tensor_onehot = F.one_hot(y_train_smote_tensor, 2).float()
-            y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
+            # Shape (N, 1) float — ready for BCEWithLogitsLoss
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
 
-            return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor_onehot, y_test_tensor_onehot
+            return X_train_smote_tensor, X_test_tensor, y_train_smote_tensor, y_test_tensor
         else:
             X_train, X_val, X_test, y_train, y_val, y_test = split
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
-            # Add .to_numpy() to the Pandas objects
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
             X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.long)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.long)
-            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.long)
+            # Shape (N, 1) float — ready for BCEWithLogitsLoss
+            y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(1)
 
-            # One-hot configuration for softmax output
-            y_train_smote_tensor_onehot = F.one_hot(y_train_smote_tensor, 2).float()
-            y_test_tensor_onehot = F.one_hot(y_test_tensor, 2).float()
-            y_val_tensor_onehot = F.one_hot(y_val_tensor, 2).float()
-
-            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor_onehot, y_test_tensor_onehot, y_val_tensor_onehot
+            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor, y_test_tensor, y_val_tensor
 
     def get_class_weights(
         self,
