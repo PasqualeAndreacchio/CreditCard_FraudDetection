@@ -4,48 +4,31 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
+from src.Datasets.preprocess import Preprocessing
 from sklearn.metrics import roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, roc_curve, precision_recall_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 from src.models.Autoencoder import Encoder, FraudAutoencoder
 import os
 
-# (Ensure your Encoder and FraudAutoencoder are defined here)
-
-def prepare_data(csv_path="data/reconstruction.csv", drop_time=True):
-    """Loads dataset and splits into train (normal only) and test (mixed)."""
-    df = pd.read_csv(csv_path)
-    
-    if drop_time and "Time" in df.columns:
-        df = df.drop(columns=["Time"])
-        
-    X = df.drop(columns=["Class"]).values
-    y = df["Class"].values
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    # Filter training data to ONLY contain normal transactions
-    normal_mask_train = (y_train == 0)
-    X_train_normal = X_train[normal_mask_train]
-    
-    train_tensor = torch.tensor(X_train_normal, dtype=torch.float32)
-    test_tensor = torch.tensor(X_test, dtype=torch.float32)
-    test_labels = torch.tensor(y_test, dtype=torch.float32)
-    
-    return train_tensor, test_tensor, test_labels
-
-
 def train_and_evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    
+
     # 1. Prepare Data
-    input_dim = 29
-    train_tensor, test_tensor, test_labels = prepare_data(drop_time=True)
-    
-    train_loader = DataLoader(TensorDataset(train_tensor), batch_size=256, shuffle=True)
-    test_loader = DataLoader(TensorDataset(test_tensor, test_labels), batch_size=256, shuffle=False)
+    # Preprocessing handles: dedup/NaN cleaning, stratified split,
+    # RobustScaler (fit on train only), and normal-only train filtering.
+    # get_dataset(autoencoder=True) returns: X_train (normal only), X_test (all), y_test
+    df = pd.read_csv("data/creditcard.csv")
+    preprocessor = Preprocessing(df, drop_time=True)
+    X_train_tensor, X_test_tensor, y_test_tensor = preprocessor.get_dataset(
+        test_size=0.2, random_state=42, autoencoder=True
+    )
+
+    input_dim = X_train_tensor.shape[1]
+
+    train_loader = DataLoader(TensorDataset(X_train_tensor), batch_size=256, shuffle=True)
+    test_loader = DataLoader(TensorDataset(X_test_tensor, y_test_tensor), batch_size=256, shuffle=False)
     
     # 2. Load Pre-trained Encoder
     encoder = Encoder(input_dim=input_dim)

@@ -124,14 +124,14 @@ class Preprocessing:
 
             X_train_tensor = torch.tensor(X_train_normal.to_numpy(), dtype=torch.float32)
             X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
-            # Shape (N, 1) float — ready for BCEWithLogitsLoss / evaluation
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            # Shape (N,) long — used for evaluation metrics only (not a loss target)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32)
 
             if not val_size:
                 return X_train_tensor, X_test_tensor, y_test_tensor
             else:
                 X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
-                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(1)
+                y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32)
                 return X_train_tensor, X_val_tensor, X_test_tensor, y_val_tensor, y_test_tensor
     
 
