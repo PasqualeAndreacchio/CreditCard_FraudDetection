@@ -1,17 +1,16 @@
 model:
   input_dim: 29
   hidden_dims:
-  - 20
+  - 24
   - 18
-  - 12
   task: reconstruction
 batch_size: 256
 test_size: 0.2
 val_size: 0
 training:
   epochs: 100
-  learning_rate: 0.00023270677083837802
-  weight_decay: 8.179499475211674e-06
+  learning_rate: 0.0004993662066506425
+  weight_decay: 0.00015061458746961162
   optimizer: adam
   scheduler:
     type: none

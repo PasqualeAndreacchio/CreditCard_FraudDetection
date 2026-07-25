@@ -12,30 +12,37 @@ from src.models.Autoencoder import Encoder, FraudAutoencoder
 import os, yaml
 
 def train_and_evaluate():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # ── Configuration ────────────────────────────────────────────────────
+    with open("configs/config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
+    device = torch.device(config.get("device", "cpu"))
     print(f"Using device: {device}")
 
-    # 1. Prepare Data
+    # Training hyperparameters (all from config)
+    training_cfg = config["training"]
+    batch_size = config.get("batch_size", 256)
+    epochs = training_cfg["epochs"]
+    learning_rate = training_cfg["learning_rate"]
+    weight_decay = training_cfg.get("weight_decay", 0.0)
+    optimizer_name = training_cfg.get("optimizer", "adam").lower()
+    loss_name = training_cfg.get("loss", "huber").lower()
+    test_size = config.get("test_size", 0.2)
+    seed = config.get("seed", 42)
+
+    # Architecture parameters — same list used by FraudAutoencoder.
+    input_dim = config["model"]["input_dim"]
+    hidden_dims = config["model"]["hidden_dims"]
+
+    # ── Data Preparation ─────────────────────────────────────────────────
     # Preprocessing handles: dedup/NaN cleaning, stratified split,
     # RobustScaler (fit on train only), and normal-only train filtering.
     # get_dataset(autoencoder=True) returns: X_train (normal only), X_test (all), y_test
     df = pd.read_csv("data/reconstruction.csv")
     preprocessor = Preprocessing(df, drop_time=True)
     X_train_tensor, X_test_tensor, y_test_tensor = preprocessor.get_dataset(
-        test_size=0.2, random_state=42, autoencoder=True
+        test_size=test_size, random_state=seed, autoencoder=True
     )
-
-    with open("configs/config.yaml", "r") as f:
-            config = yaml.safe_load(f)
-    
-    # Hyperparameters
-    batch_size = config.get("batch_size", 256)
-    epochs = 200
-    learning_rate = 1e-3
-
-    # Architecture parameters — same list used by FraudAutoencoder.
-    input_dim   = config["model"]["input_dim"]
-    hidden_dims = config["model"]["hidden_dims"]
 
     train_loader = DataLoader(TensorDataset(X_train_tensor), batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(TensorDataset(X_test_tensor, y_test_tensor), batch_size=batch_size, shuffle=False)
@@ -52,9 +59,21 @@ def train_and_evaluate():
     for param in model.encoder.parameters():
         param.requires_grad = False
 
-    # Optimizers
-    optimizer = optim.Adam(model.decoder.parameters(), lr=learning_rate)
-    criterion = nn.SmoothL1Loss()
+    # Optimizer (from config)
+    if optimizer_name == "adam":
+        optimizer = optim.Adam(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    elif optimizer_name == "adamw":
+        optimizer = optim.AdamW(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    elif optimizer_name == "sgd":
+        optimizer = optim.SGD(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay, momentum=0.9)
+    else:
+        raise ValueError(f"Unknown optimizer '{optimizer_name}'. Use 'adam', 'adamw', or 'sgd'.")
+
+    # Loss function (from config)
+    _losses = {"mse": nn.MSELoss, "mae": nn.L1Loss, "huber": nn.SmoothL1Loss}
+    if loss_name not in _losses:
+        raise ValueError(f"Unknown loss '{loss_name}'. Choose from {list(_losses.keys())}.")
+    criterion = _losses[loss_name]()
     
     # 4. Training Loop (Decoder Only)
     print("\n--- Starting Decoder Training ---")
@@ -122,7 +141,7 @@ def train_and_evaluate():
     # 7. PLOTTING
     # ---------------------------------------------------------
     
-    output_dir = "results/Contrastive"
+    output_dir = config.get("anomaly", {}).get("results_dir", "results/Contrastive")
     os.makedirs(output_dir, exist_ok=True)
 
     # Plot 1: Confusion Matrix

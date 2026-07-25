@@ -1,60 +1,34 @@
-# ============================================================================
-#  FFNN Autoencoder — Configuration
-#  Credit Card Fraud Detection (Anomaly Detection)
-# ============================================================================
-# This file controls the entire architecture and training pipeline.
-# To change the model depth/width, edit encoder_layers / decoder_layers.
-# No code changes are required.
-# ============================================================================
-
-# ─── Model Architecture ─────────────────────────────────────────────────────
 model:
-  # Number of input features (fixed by the credit card dataset).
   input_dim: 29
-
-  # Encoder compression path: input_dim → hidden_dims[0] → ... → hidden_dims[-1].
-  # The last value is the bottleneck (latent space) dimension.
-  # The decoder is the exact mirror: hidden_dims[-1] → ... → hidden_dims[0] → input_dim.
-  # To make the network deeper, just add more values to this list.
-  hidden_dims: [24, 16, 8]
-
-  task: "reconstruction"           # "reconstruction" or "classification"
-
-# ─── DataLoaders ───────────────────────────────────────────────────────────────
-batch_size: 512                    # Mini-batch size
-test_size: 0.2                     # fraction of samples for the test set
-val_size: 0                        # fraction of samples for the validation set
-
-
-# ─── Training ───────────────────────────────────────────────────────────────
+  hidden_dims:
+  - 24
+  - 18
+  task: reconstruction
+batch_size: 256
+test_size: 0.2
+val_size: 0
 training:
-  epochs: 100                        # Maximum number of training epochs
-  learning_rate: 0.001               # Initial learning rate
-  weight_decay: 0.0001               # L2 regularization (AdamW)
-  optimizer: "adam"                   # Optimizer: adam | adamw | sgd
+  epochs: 100
+  learning_rate: 0.0004993662066506425
+  weight_decay: 0.00015061458746961162
+  optimizer: adam
   scheduler:
-    type: "none"        # LR scheduler: reduce_on_plateau | cosine | step | none
-    patience: 20                     # Epochs to wait before reducing LR (reduce_on_plateau)
-    factor: 0.5                      # LR reduction factor
-    step_size: 30                    # Step size for StepLR scheduler
+    type: none
+    patience: 20
+    factor: 0.5
+    step_size: 30
   early_stopping:
-    enabled: true                    # Enable early stopping
-    patience: 10                     # Epochs without improvement before stopping
-    min_delta: 0.00001                # Minimum improvement to count as progress
-  loss: "huber"                        # Reconstruction loss: mse | mae | huber | bce | ce
-
-# ─── Anomaly Detection ──────────────────────────────────────────────────────
+    enabled: true
+    patience: 10
+    min_delta: 1.0e-05
+  loss: mse
 anomaly:
-  threshold_method: "f1_optimal"     # Method: percentile | mean_std | f1_optimal
-  percentile: 95                     # Percentile of val errors (if method = percentile)
-  std_multiplier: 2.0                # N standard deviations above mean (if method = mean_std)
-
-# ─── Paths ───────────────────────────────────────────────────────────────────
+  threshold_method: f1_optimal
+  percentile: 95
+  std_multiplier: 2.0
 paths:
-  data_dir: "data/"
-  checkpoint_dir: "checkpoints/"
-  log_dir: "logs/"
-
-# ─── Reproducibility ────────────────────────────────────────────────────────
+  data_dir: data/
+  checkpoint_dir: checkpoints/
+  log_dir: logs/
 seed: 42
-device: "cpu"                        # cpu (GPU not used — local training)
+device: cpu
