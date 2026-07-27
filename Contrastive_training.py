@@ -1,41 +1,23 @@
+import argparse
 import torch
 import torch.nn as nn
 import pandas as pd
 import torch.optim as optim
 import yaml
 from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
 
 from src.models.Autoencoder import ContrastiveModel
-from src.Datasets.datasets import ContrastiveDataset
+from src.Datasets.preprocess import Preprocessing
 
-originaldata = pd.read_csv("data/creditcard.csv")
-
-normalmask = originaldata["Class"] == 0
-fraudmask = originaldata["Class"] == 1
-
-normaldata = originaldata[normalmask]
-fraudata = originaldata[fraudmask]
-
-encoder_normal_df, decoder_normal_df = train_test_split(normaldata, test_size=0.5, random_state=42) 
-encoder_fraud_df, decoder_fraud_df = train_test_split(fraudata, test_size=0.5, random_state=42) 
-
-# FIX: Wrap the dataframes in a list []
-encoder_df = pd.concat([encoder_normal_df, encoder_fraud_df])
-decoder_df = pd.concat([decoder_normal_df, decoder_fraud_df])
-
-# FIX: Add index=False
-encoder_df.to_csv("data/contrastive.csv", index=False)
-decoder_df.to_csv("data/reconstruction.csv", index=False)
 
 # ─── TRAINING LOOP ───────────────────────────────────────────────────────
 
-def train_contrastive_model():
+def train_contrastive_model(config_path: str = "configs/config.yaml"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # Load the shared config so architecture is consistent with training_Autoencoder.py.
-    with open("configs/config.yaml", "r") as f:
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
     # Hyperparameters
@@ -47,8 +29,13 @@ def train_contrastive_model():
     input_dim   = config["model"]["input_dim"]
     hidden_dims = config["model"]["hidden_dims"]
 
-    # Dataset and Dataloader (Updated initialization)
-    dataset = ContrastiveDataset(csv="data/contrastive.csv", drop_time=True)
+    # Read raw data and build the contrastive dataset via Preprocessing.
+    # This applies RobustScaler (fitted on the training split only) and
+    # produces (anchor, positive, negative) triplets without writing any
+    # intermediate CSV files to disk.
+    rawdata = pd.read_csv("data/creditcard.csv")
+    preprocessed_data = Preprocessing(rawdata, drop_time=True)
+    dataset = preprocessed_data.get_contrastive_dataset(test_size=0.2, random_state=42)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
     # Initialize the combined model
@@ -63,9 +50,9 @@ def train_contrastive_model():
     for epoch in range(1, epochs + 1):
         total_loss = 0.0
         
-        # Updated to unpack the triplet: anchor, positive, negative
+        # Unpack the triplet: anchor, positive, negative
         for anchor, positive, negative in loader:
-            anchor = anchor.to(device)
+            anchor   = anchor.to(device)
             positive = positive.to(device)
             negative = negative.to(device)
 
@@ -73,8 +60,8 @@ def train_contrastive_model():
 
             # Forward pass all three through backbone + head
             proj_anchor = model(anchor)
-            proj_pos = model(positive)
-            proj_neg = model(negative)
+            proj_pos    = model(positive)
+            proj_neg    = model(negative)
 
             # Compute Triplet Margin Loss
             loss = criterion(proj_anchor, proj_pos, proj_neg)
@@ -93,5 +80,19 @@ def train_contrastive_model():
     torch.save(model.backbone.state_dict(), "pretrained_tabular_encoder.pth")
 
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Contrastive pre-training for the FraudAutoencoder backbone"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/config.yaml",
+        help="Path to configuration YAML file (default: configs/config.yaml)",
+    )
+    args = parser.parse_args()
+    train_contrastive_model(config_path=args.config)
+
+
 if __name__ == "__main__":
-    train_contrastive_model()
+    main()
