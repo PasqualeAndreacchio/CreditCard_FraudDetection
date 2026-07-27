@@ -1,10 +1,12 @@
 """
-Training pipeline for the Autoencoder.
+Generic training pipeline for Credit Card Fraud Detection.
 
-Handles:
+Handles both reconstruction (autoencoder) and classification (MLP) tasks.
+
+Provides:
     - Optimizer and LR scheduler setup (from config)
     - Training loop with progress bars
-    - Validation at every epoch
+    - Validation at every epoch (loss, F1, AUPRC)
     - Early stopping with configurable patience
     - Best-model checkpointing
     - Training history logging
@@ -23,8 +25,6 @@ import torch.nn as nn
 from sklearn.metrics import f1_score as sklearn_f1, precision_recall_curve, average_precision_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from src.models.Autoencoder import FraudAutoencoder
 
 logger = logging.getLogger(__name__)
 
@@ -452,8 +452,11 @@ class Trainer:
             
             if self.task == "classification":
                 # Score is the probability of the Fraud class (Class 1)
-                probs = torch.softmax(outputs, dim=1)
-                scores = probs[:, 1].cpu().numpy().tolist()
+                if outputs.shape[-1] == 1:
+                    scores = torch.sigmoid(outputs).squeeze(-1).cpu().numpy().tolist()
+                else:
+                    probs = torch.softmax(outputs, dim=1)
+                    scores = probs[:, 1].cpu().numpy().tolist()
                 
             elif self.task == "reconstruction":
                 # Score is the Reconstruction Error (MSE) per individual sample.
@@ -499,8 +502,11 @@ class Trainer:
             outputs = self.model(x)
 
             if self.task == "classification":
-                probs = torch.softmax(outputs, dim=1)
-                scores = probs[:, 1].cpu().numpy().tolist()
+                if outputs.shape[-1] == 1:
+                    scores = torch.sigmoid(outputs).squeeze(-1).cpu().numpy().tolist()
+                else:
+                    probs = torch.softmax(outputs, dim=1)
+                    scores = probs[:, 1].cpu().numpy().tolist()
             elif self.task == "reconstruction":
                 mse_per_sample = torch.mean((outputs - x) ** 2, dim=tuple(range(1, x.ndim)))
                 scores = mse_per_sample.cpu().numpy().tolist()

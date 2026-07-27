@@ -2,14 +2,12 @@
 numpy
 pandas
 matplotlib
+seaborn
 pyyaml
 tqdm
 scikit-learn
-pydantic
 
 # Deep Learning
 torch
-torchvision
-torchmetrics
-imblearn
+imbalanced-learn
 optuna

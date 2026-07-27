@@ -1,30 +1,43 @@
+"""
+Contrastive pre-training for the FraudAutoencoder backbone.
+
+Pipeline:
+    1. Load configuration (configs/config.yaml)
+    2. Build a ContrastiveDataset via Preprocessing
+    3. Train with ContrastiveTrainer (TripletMarginLoss)
+    4. Save the backbone encoder weights (projection head discarded)
+"""
+
 import argparse
-import torch
+
 import pandas as pd
-import yaml
+import torch
 from torch.utils.data import DataLoader
 
+from src.utils import load_config, setup_logging, set_seed, get_device
 from src.models.Autoencoder import ContrastiveModel
 from src.Datasets.preprocess import Preprocessing
 from src.Train.contrastive_trainer import ContrastiveTrainer
 
 
-# Training function exploiting ContrastiveTrainer
 def train_contrastive_model(config_path: str = "configs/config.yaml") -> None:
+    """Contrastive pre-training pipeline.
 
-    # Load configuration and get the device
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    device = torch.device(config.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
-    print(f"Using device: {device}")
+    Args:
+        config_path: Path to the YAML configuration file.
+    """
+    config = load_config(config_path)
+    setup_logging(log_dir=config["paths"].get("log_dir"))
+    set_seed(config.get("seed", 42))
+    device = get_device(config)
+    config["device"] = str(device)
 
     # Architecture parameters
     input_dim   = config["model"]["input_dim"]
     hidden_dims = config["model"]["hidden_dims"]
     batch_size  = config.get("batch_size", 256)
 
-    # Read raw data and build the contrastive dataset via Preprocessing.
+    # Read raw data and build the contrastive dataset via Preprocessing
     rawdata = pd.read_csv("data/creditcard.csv")
     preprocessed_data = Preprocessing(rawdata, drop_time=True)
     dataset = preprocessed_data.get_contrastive_dataset(
@@ -41,7 +54,6 @@ def train_contrastive_model(config_path: str = "configs/config.yaml") -> None:
     trainer.fit(train_loader=loader)
 
 
-# Main function to parse arguments and launch training
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Contrastive pre-training for the FraudAutoencoder backbone"

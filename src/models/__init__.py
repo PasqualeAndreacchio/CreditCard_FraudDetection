@@ -2,9 +2,18 @@
 Models sub-package for Credit Card Fraud Detection.
 
 Available models:
-    - FFNNAutoencoder: Feed-Forward Neural Network Autoencoder for anomaly detection.
+    - FraudAutoencoder: Feed-Forward Autoencoder for anomaly-based fraud detection.
+    - FraudDetectionMLP: Supervised MLP classifier for direct fraud classification.
+    - ContrastiveModel: Encoder backbone + projection head for contrastive pre-training.
 """
 
-from src.models.FFNNDecoder import FFNNAutoencoder
+from src.models.Autoencoder import FraudAutoencoder, ContrastiveModel, Encoder, Decoder
+from src.models.Classifier import FraudDetectionMLP
 
-__all__ = ["FFNNAutoencoder"]
+__all__ = [
+    "FraudAutoencoder",
+    "ContrastiveModel",
+    "Encoder",
+    "Decoder",
+    "FraudDetectionMLP",
+]

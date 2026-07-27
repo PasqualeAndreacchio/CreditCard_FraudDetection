@@ -1,5 +1,5 @@
-# Classification model — Complete_Autoencoder
-# Attention encoder + FFNN decoder with softmax output (2 classes)
+# Classification model — FraudDetectionMLP
+# Supervised MLP classifier with BCEWithLogitsLoss (binary output)
 
 model:
   encoder:

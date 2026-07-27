@@ -1,184 +1,177 @@
-import pandas as pd
+"""
+Train, evaluate, and test the FraudAutoencoder for anomaly-based fraud detection.
+
+Pipeline:
+    1. Load configuration (configs/config.yaml)
+    2. Preprocess data (stratified split, RobustScaler, normal-only training set)
+    3. (Optional) Load contrastive pre-trained encoder weights
+    4. Train with Trainer (early stopping, checkpointing on val AUPRC)
+    5. Evaluate with ReconstructionEvaluator (full metrics + 6 diagnostic plots)
+    6. Plot training history
+"""
+
+import argparse
+import os
+
 import numpy as np
+import pandas as pd
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+
+from src.utils import load_config, setup_logging, set_seed, get_device, count_parameters
 from src.Datasets.preprocess import Preprocessing
-from sklearn.metrics import roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, roc_curve, precision_recall_curve
-import matplotlib.pyplot as plt
-import seaborn as sns
-from src.models.Autoencoder import Encoder, FraudAutoencoder
-import os, yaml
+from src.models.Autoencoder import FraudAutoencoder
+from src.Train.trainer import Trainer
+from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
+from src.Evaluation.plots import plot_training_history
 
-def train_and_evaluate():
-    # ── Configuration ────────────────────────────────────────────────────
-    with open("configs/config.yaml", "r") as f:
-        config = yaml.safe_load(f)
 
-    device = torch.device(config.get("device", "cpu"))
-    print(f"Using device: {device}")
+def train_and_evaluate(config_path: str = "configs/config.yaml", eval_only: bool = False) -> None:
+    """Full autoencoder pipeline: preprocess → train → evaluate.
 
-    # Training hyperparameters (all from config)
-    training_cfg = config["training"]
+    Args:
+        config_path: Path to the YAML configuration file.
+        eval_only: If True, skip training and load existing checkpoint for evaluation.
+    """
+    # ── 1. Configuration & Setup ─────────────────────────────────────────
+    config = load_config(config_path)
+    setup_logging(log_dir=config["paths"].get("log_dir"))
+    set_seed(config.get("seed", 42))
+    device = get_device(config)
+    config["device"] = device  # Inject resolved device into config for Trainer
+
+    # Training parameters
     batch_size = config.get("batch_size", 256)
-    epochs = training_cfg["epochs"]
-    learning_rate = training_cfg["learning_rate"]
-    weight_decay = training_cfg.get("weight_decay", 0.0)
-    optimizer_name = training_cfg.get("optimizer", "adam").lower()
-    loss_name = training_cfg.get("loss", "huber").lower()
     test_size = config.get("test_size", 0.2)
+    val_size = config.get("val_size", 0.15)
     seed = config.get("seed", 42)
+    drop_time = config.get("drop_time", True)
+    freeze_encoder = config.get("freeze_encoder", True)
 
-    # Architecture parameters — same list used by FraudAutoencoder.
-    input_dim = config["model"]["input_dim"]
-    hidden_dims = config["model"]["hidden_dims"]
+    # ── 2. Data Preparation ──────────────────────────────────────────────
+    data_dir = config["paths"].get("data_dir", "data/")
+    data_path = os.path.join(data_dir, "creditcard.csv")
+    df = pd.read_csv(data_path)
+    preprocessor = Preprocessing(df, drop_time=drop_time)
 
-    # ── Data Preparation ─────────────────────────────────────────────────
-    # Preprocessing handles: dedup/NaN cleaning, stratified split,
-    # RobustScaler (fit on train only), and normal-only train filtering.
-    # get_dataset(autoencoder=True) returns: X_train (normal only), X_test (all), y_test
-    df = pd.read_csv("data/reconstruction.csv")
-    preprocessor = Preprocessing(df, drop_time=True)
-    X_train_tensor, X_test_tensor, y_test_tensor = preprocessor.get_dataset(
-        test_size=test_size, random_state=seed, autoencoder=True
+    # get_dataset(autoencoder=True) with val_size returns:
+    #   X_train (normal only), X_val (all), X_test (all), y_val, y_test
+    X_train_tensor, X_val_tensor, X_test_tensor, y_val_tensor, y_test_tensor = (
+        preprocessor.get_dataset(
+            test_size=test_size,
+            val_size=val_size,
+            random_state=seed,
+            autoencoder=True,
+        )
     )
 
-    train_loader = DataLoader(TensorDataset(X_train_tensor), batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(TensorDataset(X_test_tensor, y_test_tensor), batch_size=batch_size, shuffle=False)
-    
-    
-    # 3. Initialize Autoencoder and load pre-trained encoder
+    # Train: plain tensor (unsupervised, normal-only → target is input itself)
+    train_loader = DataLoader(
+        X_train_tensor, batch_size=batch_size, shuffle=True,
+    )
+    # Val: TensorDataset with labels (needed for AUPRC/F1 computation during training)
+    val_loader = DataLoader(
+        TensorDataset(X_val_tensor, y_val_tensor), batch_size=batch_size, shuffle=False,
+    )
+    # Test: TensorDataset with labels (for final evaluation)
+    test_loader = DataLoader(
+        TensorDataset(X_test_tensor, y_test_tensor), batch_size=batch_size, shuffle=False,
+    )
+
+    # ── 3. Model Initialization ──────────────────────────────────────────
     model = FraudAutoencoder(config=config).to(device)
-    try:
-        model.encoder.load_state_dict(torch.load("pretrained_tabular_encoder.pth", map_location=device, weights_only=True))
-        print("Successfully loaded pre-trained encoder weights.")
-    except FileNotFoundError:
-        print("Pre-trained weights not found. Using randomly initialized encoder.")
-        
-    for param in model.encoder.parameters():
-        param.requires_grad = False
+    print(f"FraudAutoencoder — {count_parameters(model):,} trainable parameters")
 
-    # Optimizer (from config)
-    if optimizer_name == "adam":
-        optimizer = optim.Adam(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    elif optimizer_name == "adamw":
-        optimizer = optim.AdamW(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    elif optimizer_name == "sgd":
-        optimizer = optim.SGD(model.decoder.parameters(), lr=learning_rate, weight_decay=weight_decay, momentum=0.9)
+    val_labels = y_val_tensor.cpu().numpy().astype(int)
+    trainer = Trainer(model=model, config=config)
+
+    if not eval_only:
+        # Optionally load contrastive pre-trained encoder weights
+        pretrained_path = config.get("contrastive", {}).get(
+            "backbone_save_path", "pretrained_tabular_encoder.pth"
+        )
+        if os.path.isfile(pretrained_path):
+            model.encoder.load_state_dict(
+                torch.load(pretrained_path, map_location=device, weights_only=True)
+            )
+            print(f"Loaded pre-trained encoder weights from: {pretrained_path}")
+        else:
+            print("No pre-trained encoder found — training from scratch.")
+
+        # Optionally freeze encoder (train decoder only)
+        if freeze_encoder and os.path.isfile(pretrained_path):
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+            print("Encoder frozen — training decoder only.")
+
+        # ── 4. Training ──────────────────────────────────────────────────
+        history = trainer.fit(
+            train_loader=train_loader,
+            val_loader=val_loader,
+            val_labels=val_labels,
+        )
+
+        # Plot training history
+        log_dir = config["paths"].get("log_dir", "logs/")
+        plot_training_history(
+            history,
+            save_dir=log_dir,
+            filename="autoencoder_training_history.png",
+            title="Autoencoder Training",
+        )
     else:
-        raise ValueError(f"Unknown optimizer '{optimizer_name}'. Use 'adam', 'adamw', or 'sgd'.")
+        print("\n[*] Running in EVALUATION ONLY mode (skipping training)...")
 
-    # Loss function (from config)
-    _losses = {"mse": nn.MSELoss, "mae": nn.L1Loss, "huber": nn.SmoothL1Loss}
-    if loss_name not in _losses:
-        raise ValueError(f"Unknown loss '{loss_name}'. Choose from {list(_losses.keys())}.")
-    criterion = _losses[loss_name]()
-    
-    # 4. Training Loop (Decoder Only)
-    print("\n--- Starting Decoder Training ---")
-    for epoch in range(1, epochs + 1):
-        model.train()
-        total_loss = 0.0
-        
-        for (batch_x,) in train_loader:
-            batch_x = batch_x.to(device)
-            optimizer.zero_grad()
-            reconstructed = model(batch_x)
-            
-            loss = criterion(reconstructed, batch_x)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch [{epoch}/{epochs}] - Reconstruction Loss (MSE): {avg_loss:.4f}")
-        
-    # 5. Evaluation Loop
-    print("\n--- Starting Evaluation ---")
-    model.eval()
-    all_errors = []
-    all_labels = []
-    eval_criterion = nn.MSELoss(reduction='none')
-    
-    with torch.no_grad():
-        for batch_x, batch_y in test_loader:
-            batch_x = batch_x.to(device)
-            reconstructed = model(batch_x)
-            errors = eval_criterion(reconstructed, batch_x).mean(dim=1)
-            
-            all_errors.extend(errors.cpu().numpy())
-            all_labels.extend(batch_y.numpy())
-            
-    all_errors = np.array(all_errors)
-    all_labels = np.array(all_labels)
-    
-    # 6. Analyze Results & Find Threshold
-    normal_errors = all_errors[all_labels == 0]
-    fraud_errors = all_errors[all_labels == 1]
-    
-    print("\n--- Results ---")
-    print(f"Average Normal Error: {normal_errors.mean():.4f}")
-    print(f"Average Fraud Error:  {fraud_errors.mean():.4f}")
-    
-    auc = roc_auc_score(all_labels, all_errors)
-    print(f"ROC-AUC Score: {auc:.4f}")
-    
-    # Find the threshold that maximizes F1 score
-    precisions, recalls, thresholds = precision_recall_curve(all_labels, all_errors)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        f1_scores = (2 * precisions * recalls) / (precisions + recalls)
-    f1_scores = np.nan_to_num(f1_scores)
-    
-    best_idx = int(np.argmax(f1_scores))
-    best_threshold = thresholds[min(best_idx, len(thresholds) - 1)]
-    print(f"Optimal Anomaly Threshold (Max F1): {best_threshold:.4f}")
-    
-    # Make binary predictions
-    preds = (all_errors > best_threshold).astype(int)
+    # ── 5. Load Best Checkpoint ──────────────────────────────────────────
+    checkpoint_name = config["paths"].get("checkpoint_name", "autoencoder_best.pt")
+    best_ckpt_path = os.path.join(trainer.checkpoint_dir, checkpoint_name)
+    if os.path.isfile(best_ckpt_path):
+        trainer.load_checkpoint(best_ckpt_path)
+        print(f"Loaded best checkpoint: {best_ckpt_path}")
+    else:
+        if eval_only:
+            raise FileNotFoundError(f"Checkpoint not found at {best_ckpt_path}. Run training first.")
 
-    # ---------------------------------------------------------
-    # 7. PLOTTING
-    # ---------------------------------------------------------
-    
-    output_dir = config.get("anomaly", {}).get("results_dir", "results/Contrastive")
-    os.makedirs(output_dir, exist_ok=True)
+    # ── 6. Determine Optimal Threshold on Validation Set ───────────────
+    evaluator = ReconstructionEvaluator(model=model, config=config, device=device)
+    val_scores = evaluator.compute_anomaly_scores(val_loader)
+    val_threshold = evaluator.find_optimal_threshold(val_scores, val_labels)
+    print(f"Optimal threshold determined on Validation set: {val_threshold:.6f}")
 
-    # Plot 1: Confusion Matrix
-    cm = confusion_matrix(all_labels, preds)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Normal", "Fraud"])
-    fig, ax = plt.subplots(figsize=(6, 5))
-    disp.plot(cmap="Blues", values_format="d", ax=ax)
-    plt.title("Confusion Matrix")
-    plt.savefig(f"{output_dir}/ConfusionMatrix.png")
-    
+    # ── 7. Evaluation on Test Set (using Validation Threshold) ──────────
+    test_labels = y_test_tensor.cpu().numpy().astype(int)
+    metrics = evaluator.evaluate(test_loader, test_labels, threshold=val_threshold)
 
-    # Plot 2: Reconstruction Error Distribution
-    plt.figure(figsize=(10, 6))
-    sns.histplot(normal_errors, bins=50, color='blue', alpha=0.5, label='Normal', stat='density', log_scale=(False, True))
-    sns.histplot(fraud_errors, bins=50, color='red', alpha=0.5, label='Fraud', stat='density', log_scale=(False, True))
-    plt.axvline(best_threshold, color='black', linestyle='dashed', linewidth=2, label=f'Threshold ({best_threshold:.2f})')
-    plt.title("Reconstruction Error Distribution (Log Scale Y)")
-    plt.xlabel("Reconstruction Error (MSE)")
-    plt.ylabel("Density (Log Scale)")
-    plt.legend()
-    # Limit x-axis to 99.5th percentile to prevent extreme outliers from squishing the plot
-    plt.xlim(0, np.percentile(all_errors, 99.5)) 
-    plt.savefig(f"{output_dir}/ReconstructionError.png")
+    print("\n" + "=" * 55)
+    print("  FINAL TEST RESULTS (Threshold from Validation Set)")
+    print("=" * 55)
+    print(f"  Threshold: {val_threshold:.6f}")
+    print(f"  F1:        {metrics['f1']:.4f}")
+    print(f"  F2:        {metrics['f2']:.4f}")
+    print(f"  MCC:       {metrics['mcc']:.4f}")
+    print(f"  AUPRC:     {metrics['auprc']:.4f}")
+    print(f"  AUROC:     {metrics['auroc']:.4f}")
+    print("=" * 55)
 
-    # Plot 3: ROC Curve
-    fpr, tpr, _ = roc_curve(all_labels, all_errors)
-    plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {auc:.4f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic (ROC)')
-    plt.legend(loc="lower right")
-    plt.savefig(f"{output_dir}/ROC_Curve.png")
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Train and evaluate the FraudAutoencoder for anomaly detection"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/config.yaml",
+        help="Path to the YAML configuration file (default: configs/config.yaml)",
+    )
+    parser.add_argument(
+        "--eval_only",
+        action="store_true",
+        help="Skip training and evaluate using the saved checkpoint immediately",
+    )
+    args = parser.parse_args()
+    train_and_evaluate(config_path=args.config, eval_only=args.eval_only)
 
 
 if __name__ == "__main__":
-    train_and_evaluate()
+    main()

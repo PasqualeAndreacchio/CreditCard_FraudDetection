@@ -192,14 +192,14 @@ class Preprocessing:
             X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
             X_train_smote_tensor = torch.tensor(X_train_smote.to_numpy(), dtype=torch.float32)
-            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
             X_val_tensor = torch.tensor(X_val.to_numpy(), dtype=torch.float32)
+            X_test_tensor = torch.tensor(X_test.to_numpy(), dtype=torch.float32)
             # Shape (N, 1) float — ready for BCEWithLogitsLoss
             y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(), dtype=torch.float32).unsqueeze(1)
-            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
             y_val_tensor = torch.tensor(y_val.to_numpy(), dtype=torch.float32).unsqueeze(1)
+            y_test_tensor = torch.tensor(y_test.to_numpy(), dtype=torch.float32).unsqueeze(1)
 
-            return X_train_smote_tensor, X_test_tensor, X_val_tensor, y_train_smote_tensor, y_test_tensor, y_val_tensor
+            return X_train_smote_tensor, X_val_tensor, X_test_tensor, y_train_smote_tensor, y_val_tensor, y_test_tensor
 
     def get_class_weights(
         self,
