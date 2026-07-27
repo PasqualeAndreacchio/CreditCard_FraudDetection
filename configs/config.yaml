@@ -32,3 +32,10 @@ paths:
   log_dir: logs/
 seed: 42
 device: cpu
+contrastive:
+  epochs: 20
+  learning_rate: 1.0e-3
+  weight_decay: 0.0
+  margin: 1.0          # TripletMarginLoss margin
+  p: 2                 # Distance norm (p=2 -> Euclidean)
+  backbone_save_path: pretrained_tabular_encoder.pth
