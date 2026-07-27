@@ -1,55 +1,78 @@
+import argparse
 import pandas as pd
 import torch
-import torch.nn as nn
-import torch.optim as optim
+import yaml
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
+
 from src.Datasets.preprocess import Preprocessing
 from src.models.Classifier import FraudDetectionMLP
-from src.Datasets.preprocess import Preprocessing
+from src.Train.trainer import Trainer
 
-# Load dataset and preprocess dropping 'Time' column and duplicates/null values
-data = pd.read_csv("data/creditcard.csv")
-preprocessor = Preprocessing(data, drop_time=True)
 
-# Get train/test split with appropriate scaling and SMOTE only on the training set
-X_train, X_test, y_train, y_test = preprocessor.get_smote_dataset(test_size=0.2, random_state=42)
-dataset = TensorDataset(X_train, y_train)
-loader = DataLoader(dataset, batch_size=1024, shuffle=True)
+# Training function using Trainer
+def train_classifier(config_path: str = "configs/classification_config.yaml") -> None:
 
-# Device, Model, Loss, Optimizer setup
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = FraudDetectionMLP(input_dim=X_train.shape[1]).to(device)
-criterion = nn.BCEWithLogitsLoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
-# Training Loop
-epochs = 30
-for epoch in range(epochs):
-    model.train()
-    total_loss = 0
+    device = torch.device(config.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
+    print(f"Using device: {device}")
 
-    pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{epochs}", unit="batch")
-    for batch_idx, (samples, labels) in enumerate(pbar):
-        # Move data to the same device as the model
-        samples, labels = samples.to(device), labels.to(device)
+    seed        = config.get("seed", 42)
+    test_size   = config.get("test_size", 0.2)
+    val_size    = config.get("val_size", 0.1)
+    batch_size  = config["training"].get("batch_size", 512)
+    drop_time   = config.get("drop_time", True)
+    use_smote   = config.get("use_smote", True)
 
-        optimizer.zero_grad()
+    # Build the dataset via Preprocessing (scaling + stratified split)
+    data = pd.read_csv("data/creditcard.csv")
+    preprocessor = Preprocessing(data, drop_time=drop_time)
 
-        # Forward pass
-        predictions = model(samples)
+    if use_smote:
+        # SMOTE is applied to the training set only; val and test are left untouched
+        X_train, X_val, X_test, y_train, y_val, y_test = preprocessor.get_smote_dataset(
+            test_size=test_size, val_size=val_size, random_state=seed
+        )
+    else:
+        X_train, X_val, X_test, y_train, y_val, y_test = preprocessor.get_dataset(
+            test_size=test_size, val_size=val_size, random_state=seed, autoencoder=False
+        )
 
-        # Calculate loss
-        loss = criterion(predictions, labels)
+    # Wrap tensors in DataLoaders
+    train_loader = DataLoader(
+        TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=True
+    )
+    val_loader = DataLoader(
+        TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False
+    )
 
-        # Backward pass
-        loss.backward()
-        optimizer.step()
+    # Build the model
+    input_dim = X_train.shape[1]
+    model = FraudDetectionMLP(input_dim=input_dim)
 
-        total_loss += loss.item()
-        # Update the bar with the running average loss
-        pbar.set_postfix(loss=f"{total_loss / (batch_idx + 1):.4f}")
+    # val_labels are needed by Trainer to compute F1/AUPRC on the validation set
+    val_labels = y_val.squeeze().numpy()
 
-    avg_loss = total_loss / len(loader)
-    pbar.set_postfix(loss=f"{avg_loss:.4f}")
-    print(f"Epoch {epoch+1}/{epochs} — Avg Loss: {avg_loss:.4f}")
+    # Delegate the full training lifecycle to Trainer
+    trainer = Trainer(model=model, config=config)
+    trainer.fit(train_loader=train_loader, val_loader=val_loader, val_labels=val_labels)
+
+
+# Main function to parse arguments and launch training
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Train the FraudDetectionMLP classifier"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/classification_config.yaml",
+        help="Path to the YAML configuration file (default: configs/classification_config.yaml)",
+    )
+    args = parser.parse_args()
+    train_classifier(config_path=args.config)
+
+
+if __name__ == "__main__":
+    main()
