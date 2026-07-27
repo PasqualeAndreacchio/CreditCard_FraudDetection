@@ -5,6 +5,7 @@ from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import RobustScaler
 import torch
 import torch.nn.functional as F
+from src.Datasets.datasets import ContrastiveDataset
 
 
 class Preprocessing:
@@ -14,7 +15,7 @@ class Preprocessing:
     On instantiation, the dataset is cleaned by removing duplicate rows and
     rows with missing values with the possibility of dropping the "Time" column.
     From there, the class exposes methods to obtain a train/test split 
-    (optionally train/val/test) ready for modeling, in three variants:
+    (optionally train/val/test) ready for modeling, in four variants:
 
     - get_dataset(): stratified split with 'Time' and 'Amount' scaled via
       RobustScaler (fit on the training set only, to avoid data leakage into
@@ -35,6 +36,13 @@ class Preprocessing:
       only, to use in the training loop instead of oversampling. Also
       respects val_size when splitting, though the validation set itself
       plays no role in the weight calculation.
+
+    - get_contrastive_dataset(): builds a ContrastiveDataset (anchor /
+      positive / negative triplets) directly from the scaled training split,
+      so contrastive pre-training reuses the same pipeline — including
+      RobustScaler and the split cache — as all other methods. The positive
+      sample is an augmented copy of the anchor (Gaussian noise), and the
+      negative is a randomly drawn fraud transaction.
 
     Splits are cached per (test_size, val_size, random_state) pair, so
     calling multiple methods with the same parameters reuses the same split
@@ -221,110 +229,51 @@ class Preprocessing:
         split = self._split_dataset(test_size=test_size, val_size=val_size, random_state=random_state)
         # y_train sits at index 2 for a 4-tuple split, index 3 for a 6-tuple split
         y_train = split[2] if not val_size else split[3]
-        return self._calculate_class_weights(y_train, verbose=verbose)    
+        return self._calculate_class_weights(y_train, verbose=verbose)
 
 
-    @overload
-    def get_sequence_dataset(
+    def get_contrastive_dataset(
         self,
-        seq_len: int = 10,
-        stride: int = 1,
-        test_size: float = 0.2,
-        val_size: None = None,
-        random_state: int = 42,
-        autoencoder: bool = True,
-        only_normal: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: ...
-
-    @overload
-    def get_sequence_dataset(
-        self,
-        seq_len: int = 10,
-        stride: int = 1,
-        test_size: float = 0.2,
-        val_size: float = 0.2,
-        random_state: int = 42,
-        autoencoder: bool = True,
-        only_normal: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: ...
-
-    def get_sequence_dataset(
-        self,
-        seq_len: int = 10,
-        stride: int = 1,
         test_size: float = 0.2,
         val_size: Optional[float] = None,
         random_state: int = 42,
-        autoencoder: bool = True,
-        only_normal: bool = True,
-    ) -> Tuple:
+        noise_std: float = 0.05,
+    ) -> ContrastiveDataset:
         """
-        Generates sequence-based datasets (3D PyTorch Tensors) using a sliding window for sequence models (e.g., LSTM Autoencoder).
+        Returns a ContrastiveDataset built from the scaled training split.
+
+        Each sample yielded by the dataset is a triplet:
+            - anchor:   a normal (class=0) transaction from the training set.
+            - positive: a noisy augmentation of the anchor (Gaussian noise
+                        with std=noise_std), representing the same class.
+            - negative: a randomly sampled fraud (class=1) transaction.
+
+        The split and scaling are handled by _split_dataset (with caching),
+        so this method is fully consistent with get_dataset(), get_smote_dataset()
+        and get_class_weights() when called with the same parameters.
+
         Args:
-            seq_len (int): Length of each sliding window sequence (number of timesteps). Default is 10.
-            stride (int): Step size for the sliding window. Default is 1.
-            test_size (float): Proportion of the dataset to include in the test split. Default is 0.2.
-            val_size (float, optional): Proportion of the dataset to include in the validation split. Default is None.
-            random_state (int): Random seed for reproducibility. Default is 42.
-            autoencoder (bool): If True, returns target formats suitable for Autoencoder reconstruction (unsupervised training).
-            only_normal (bool): If True (and autoencoder=True), filters the training set to include ONLY non-fraudulent (normal, y=0) transactions.
-                                If False, trains on all training transactions (normal + fraud). Default is True.
+            test_size (float): Proportion of the dataset held out for testing
+                               (default: 0.2).
+            val_size (float, optional): Proportion of the dataset held out for
+                                        validation. If None (default), no
+                                        validation split is created.
+            random_state (int): Random seed for reproducibility (default: 42).
+            noise_std (float): Standard deviation of the Gaussian noise used
+                               to generate positive pairs (default: 0.05).
         Returns:
-            - If val_size is None and autoencoder=True: X_train_seq, X_test_seq, y_test_seq
-            - If val_size is given and autoencoder=True: X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
-            - If autoencoder=False: X_train_seq, X_test_seq, y_train_seq, y_test_seq
+            ContrastiveDataset: A ready-to-use PyTorch Dataset that yields
+                                (anchor, positive, negative) float32 tensors.
         """
-        if seq_len <= 0:
-            raise ValueError(f"seq_len must be a positive integer, got {seq_len}")
-        if stride <= 0:
-            raise ValueError(f"stride must be a positive integer, got {stride}")
+        split = self._split_dataset(
+            test_size=test_size, val_size=val_size, random_state=random_state
+        )
 
-        split = self._split_dataset(val_size=val_size, test_size=test_size, random_state=random_state)
+        # y_train is at index 2 for a 4-tuple split, index 3 for a 6-tuple split
+        X_train = split[0]
+        y_train = split[2] if not val_size else split[3]
 
-        def _create_sequences(df_x: pd.DataFrame, series_y: Optional[pd.Series] = None):
-            x_tensor = torch.tensor(df_x.to_numpy(), dtype=torch.float32)
-            if len(x_tensor) < seq_len:
-                raise ValueError(f"Dataset size ({len(x_tensor)}) is smaller than seq_len ({seq_len}).")
-            
-            # Form 3D sequences: (num_sequences, seq_len, num_features)
-            x_seq = x_tensor.unfold(0, seq_len, stride).permute(0, 2, 1)
-
-            if series_y is not None:
-                y_tensor = torch.tensor(series_y.to_numpy(), dtype=torch.long)
-                y_seq = y_tensor[seq_len - 1 :: stride][: len(x_seq)]
-                return x_seq, y_seq
-
-            return x_seq
-
-        if not val_size:
-            X_train, X_test, y_train, y_test = split
-        else:
-            X_train, X_val, X_test, y_train, y_val, y_test = split
-
-        if autoencoder:
-            if only_normal:
-                X_train_data = X_train[y_train == 0]
-            else:
-                X_train_data = X_train
-
-            X_train_seq = _create_sequences(X_train_data)
-            X_test_seq, y_test_seq = _create_sequences(X_test, y_test)
-
-            if not val_size:
-                return X_train_seq, X_test_seq, y_test_seq
-            else:
-                X_val_seq, y_val_seq = _create_sequences(X_val, y_val)
-                return X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
-        else:
-            X_train_seq, y_train_seq = _create_sequences(X_train, y_train)
-            X_test_seq, y_test_seq = _create_sequences(X_test, y_test)
-
-            if not val_size:
-                return X_train_seq, X_test_seq, y_train_seq, y_test_seq
-            else:
-                X_val_seq, y_val_seq = _create_sequences(X_val, y_val)
-                return X_train_seq, X_val_seq, X_test_seq, y_val_seq, y_test_seq
-
+        return ContrastiveDataset.from_dataframe(X_train, y_train, noise_std=noise_std)
 
 
     @staticmethod

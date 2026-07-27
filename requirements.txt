@@ -12,3 +12,4 @@ torch
 torchvision
 torchmetrics
 imblearn
+optuna
