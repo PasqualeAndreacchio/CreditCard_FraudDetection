@@ -23,7 +23,7 @@ training:
     min_delta: 1.0e-05
   loss: mse
 anomaly:
-  threshold_method: percentile
+  threshold_method: mean_std
   percentile: 95
   std_multiplier: 2.0
   plots_dir: plots/reconstruction
