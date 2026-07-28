@@ -1,24 +1,22 @@
 # Classification model — FraudDetectionMLP
 # Supervised MLP classifier with BCEWithLogitsLoss (binary output)
+#
+# The encoder architecture (input_dim, hidden_dims) is intentionally NOT
+# defined here. It is loaded at runtime from `base_model_config` (config.yaml)
+# so that FraudDetectionMLP always uses the exact same encoder structure as
+# the contrastive pre-training, enabling correct weight loading.
+
+# Path to the base autoencoder/contrastive config — encoder architecture source
+base_model_config: "configs/config.yaml"
 
 model:
-  encoder:
-    d_embed: 128
-    d_ff: 64
-    num_heads: 8
-    dropout: 0.1
-  decoder:
-    latent_dim: 128
-    hidden_layers: [128, 64, 64, 32, 16]
-    output_dim: 2          # 2 classes: Normal / Fraud
-    activation: "relu"
-    dropout: 0.1
-    batch_norm: true
+  # input_dim and hidden_dims are injected at runtime from base_model_config
+  dropout: 0.1
   task: "classification"
 
 test_size: 0.2
 val_size: 0.1      # fraction of the full dataset held out for validation
-drop_time: false   # true -> drop the 'Time' column before preprocessing
+drop_time: true    # consistent with Contrastive_training.py and tune_Autoencoder.py
 use_smote: true    # false -> use the original imbalanced dataset + Weighted CrossEntropy
 
 training:
@@ -39,7 +37,7 @@ training:
   val_metric: "f1"       # metric used for checkpointing and early stopping: "f1" | "loss"
 
 classification:
-  threshold_method: "f1_optimal"   # percentile | mean_std | f1_optimal
+  threshold_method: "f1_optimal"    # percentile | mean_std | f1_optimal
   percentile: 95
   std_multiplier: 2.0
   plots_dir: "plots/classification"

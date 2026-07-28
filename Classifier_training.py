@@ -15,6 +15,7 @@ import os
 
 import pandas as pd
 import torch
+import yaml
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.utils import load_config, setup_logging, set_seed, get_device, count_parameters
@@ -33,6 +34,17 @@ def train_classifier(config_path: str = "configs/classification_config.yaml", ev
         eval_only: If True, skip training and load existing checkpoint for evaluation.
     """
     config = load_config(config_path)
+
+    # Load encoder architecture (input_dim, hidden_dims) from the base model
+    # config (config.yaml) so FraudDetectionMLP is built with the exact same
+    # encoder shape as the contrastive pre-training — required for correct
+    # weight loading.
+    base_cfg_path = config.get("base_model_config", "configs/config.yaml")
+    with open(base_cfg_path, "r") as _f:
+        _base_cfg = yaml.safe_load(_f)
+    config["model"]["input_dim"]   = _base_cfg["model"]["input_dim"]
+    config["model"]["hidden_dims"] = _base_cfg["model"]["hidden_dims"]
+
     setup_logging(log_dir=config["paths"].get("log_dir"))
     set_seed(config.get("seed", 42))
     device = get_device(config)
@@ -44,6 +56,7 @@ def train_classifier(config_path: str = "configs/classification_config.yaml", ev
     batch_size = config["training"].get("batch_size", 512)
     drop_time  = config.get("drop_time", True)
     use_smote  = config.get("use_smote", True)
+    freeze_encoder = config.get("freeze_encoder", True)
 
     # Build the dataset via Preprocessing (scaling + stratified split)
     data = pd.read_csv("data/creditcard.csv")
@@ -71,8 +84,7 @@ def train_classifier(config_path: str = "configs/classification_config.yaml", ev
     )
 
     # Build the model
-    input_dim = X_train.shape[1]
-    model = FraudDetectionMLP(input_dim=input_dim).to(device)
+    model = FraudDetectionMLP(config=config).to(device)
     print(f"FraudDetectionMLP — {count_parameters(model):,} trainable parameters")
 
     # val_labels are needed by Trainer to compute F1/AUPRC on the validation set
@@ -82,6 +94,25 @@ def train_classifier(config_path: str = "configs/classification_config.yaml", ev
     trainer = Trainer(model=model, config=config)
 
     if not eval_only:
+
+        # Optionally load contrastive pre-trained encoder weights
+        pretrained_path = config.get("contrastive", {}).get(
+            "backbone_save_path", "pretrained_tabular_encoder.pth"
+        )
+        if os.path.isfile(pretrained_path):
+            model.encoder.load_state_dict(
+                torch.load(pretrained_path, map_location=device, weights_only=True)
+            )
+            print(f"Loaded pre-trained encoder weights from: {pretrained_path}")
+        else:
+            print("No pre-trained encoder found — training from scratch.")
+
+        # Optionally freeze encoder (train decoder only)
+        if freeze_encoder and os.path.isfile(pretrained_path):
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+            print("Encoder frozen — training decoder only.")
+
         # Delegate the full training lifecycle to Trainer
         history = trainer.fit(train_loader=train_loader, val_loader=val_loader, val_labels=val_labels)
 

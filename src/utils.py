@@ -76,10 +76,14 @@ def _validate_config(config: dict) -> None:
             raise ValueError("'hidden_dims' must be a non-empty list of integers.")
 
     elif task == "classification":
-        # Classifier layout: model.encoder and model.decoder sub-dicts
-        for key in ["encoder", "decoder"]:
-            if key not in model_cfg:
-                raise ValueError(f"Missing required model key: '{key}'")
+        # Flat classifier layout: dropout is the only model key required here.
+        # input_dim and hidden_dims are intentionally absent from
+        # classification_config.yaml — they are injected at runtime from the
+        # base model config (config.yaml) in Classifier_training.py so that
+        # FraudDetectionMLP always uses the same encoder shape as the
+        # contrastive pre-training.
+        if "dropout" not in model_cfg:
+            raise ValueError("Missing required model key: 'dropout' (classification task).")
 
     elif task is None:
         raise ValueError("Missing required model key: 'task'. Must be 'reconstruction' or 'classification'.")
