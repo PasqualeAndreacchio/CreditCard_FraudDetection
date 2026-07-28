@@ -16,7 +16,9 @@ from typing import Any
 
 import yaml
 import numpy as np
+import pandas as pd
 import torch
+from sklearn.model_selection import train_test_split
 
 logger = logging.getLogger(__name__)
 
@@ -180,3 +182,22 @@ def count_parameters(model: torch.nn.Module) -> int:
         Total number of trainable parameters.
     """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+# 50/50 split for encoder-decoder to avoid data leakage
+
+def encoder_decoder_data_split(rawdata: pd.DataFrame, random_state: int):
+
+    masknormal = rawdata["Class"] == 0
+    maskfraud = rawdata["Class"] == 1
+
+    normal = rawdata[masknormal]
+    fraud = rawdata[maskfraud]
+
+    encoder_normal, decoder_normal = train_test_split(normal, test_size=0.5, random_state=random_state)
+    encoder_fraud, decoder_fraud = train_test_split(fraud, test_size=0.5, random_state=random_state)
+
+    encoder_df = pd.concat([encoder_normal, encoder_fraud])
+    decoder_df = pd.concat([decoder_normal, decoder_fraud])
+
+    return encoder_df, decoder_df
