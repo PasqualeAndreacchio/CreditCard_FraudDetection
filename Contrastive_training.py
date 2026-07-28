@@ -42,6 +42,7 @@ def train_contrastive_model(config_path: str = "configs/config.yaml") -> None:
     preprocessed_data = Preprocessing(rawdata, drop_time=True)
     dataset = preprocessed_data.get_contrastive_dataset(
         test_size=config.get("test_size", 0.2),
+        val_size=config.get("val_size", 0.15),
         random_state=config.get("seed", 42),
     )
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)

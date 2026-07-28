@@ -13,26 +13,17 @@ class ContrastiveDataset(Dataset):
         positive: An augmented version (added noise) of the anchor.
         negative: A randomly sampled fraudulent transaction.
     """
-    def __init__(self, csv: str = "data/creditcard.csv", drop_time: bool = True, noise_std: float = 0.05):
-        df = pd.read_csv(csv)
-
-        # Optionally drop 'Time' column as per standard preprocessing
-        if drop_time and "Time" in df.columns:
-            df = df.drop(columns=["Time"])
-
-        # Separate target ('Class') from features
-        X = df.drop(columns=["Class"]).to_numpy()
-        y = df["Class"].to_numpy()
-
-        # Mask normal (0) and fraud (1) samples
-        normal_mask = (y == 0)
-        fraud_mask = (y == 1)
-
-        # Convert to PyTorch FloatTensors
-        self.normal_data = torch.tensor(X[normal_mask], dtype=torch.float32)
-        self.fraud_data = torch.tensor(X[fraud_mask], dtype=torch.float32)
-        
-        self.noise_std = noise_std
+    def __init__(self, *args, **kwargs) -> None:
+        raise RuntimeError(
+            "ContrastiveDataset cannot be instantiated directly.\n"
+            "Use Preprocessing.get_contrastive_dataset() instead, which ensures a\n"
+            "proper train/val/test split and RobustScaler fitting before building\n"
+            "the contrastive dataset:\n\n"
+            "    preprocessor = Preprocessing(df, drop_time=True)\n"
+            "    dataset = preprocessor.get_contrastive_dataset(\n"
+            "        test_size=0.2, val_size=0.15, random_state=42\n"
+            "    )"
+        )
 
     def __len__(self) -> int:
         # Base the dataset length on normal transactions
