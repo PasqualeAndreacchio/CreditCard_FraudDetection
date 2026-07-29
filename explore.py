@@ -175,9 +175,6 @@ def main():
         axes[i].set_xticks([0, 1])
         axes[i].set_xticklabels(['Normal (0)', 'Fraud (1)'])
         
-        # Remove outlier visualization points or keep them faint to focus on IQR comparison
-        # We can also plot distribution instead, but boxplot is great to see the separation
-        
     plt.suptitle("Boxplots of Features Most Correlated with Class", y=0.98, fontweight='bold', fontsize=18)
     plt.tight_layout()
     plt.savefig(os.path.join(plots_dir, "discriminative_features.png"), dpi=300)

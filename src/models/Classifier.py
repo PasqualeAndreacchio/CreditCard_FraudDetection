@@ -4,7 +4,18 @@ import torch.nn as nn
 from .Autoencoder import Encoder
 
 class FraudDetectionMLP(nn.Module):
-    def __init__(self, config: dict):
+    """Supervised MLP classifier for direct fraud detection.
+
+    Reuses the same Encoder backbone as FraudAutoencoder / ContrastiveModel,
+    followed by a two-layer classification head with BatchNorm, ReLU and
+    Dropout.  Outputs a single raw logit (use BCEWithLogitsLoss for training).
+
+    Args:
+        config: Configuration dictionary containing 'model.input_dim',
+            'model.hidden_dims', and 'model.dropout'.
+    """
+
+    def __init__(self, config: dict) -> None:
         super().__init__()
 
         input_dim = config["model"]["input_dim"]
@@ -14,25 +25,19 @@ class FraudDetectionMLP(nn.Module):
 
         self.encoder = Encoder(input_dim, hidden_dims)
         self.classifier = nn.Sequential(
-
             nn.Linear(latent_dim, latent_dim // 2),
             nn.BatchNorm1d(latent_dim // 2),
-            nn.ReLU(), 
-            nn.Dropout(dropout), 
+            nn.ReLU(),
+            nn.Dropout(dropout),
 
             nn.Linear(latent_dim // 2, latent_dim // 4),
             nn.BatchNorm1d(latent_dim // 4),
-            nn.ReLU(), 
+            nn.ReLU(),
             nn.Dropout(dropout),
 
-            # Out layer
             nn.Linear(latent_dim // 4, 1),
         )
-        
 
-    def forward(self, x):
-        # x shape: (batch_size, input_dim)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         latent = self.encoder(x)
-        prediction = self.classifier(latent)
-
-        return prediction
+        return self.classifier(latent)

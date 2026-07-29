@@ -18,7 +18,6 @@ from optuna.samplers import TPESampler
 from src.models.Autoencoder import ContrastiveModel, FraudAutoencoder
 from src.Train.trainer import Trainer
 from src.Datasets.preprocess import Preprocessing
-from src.Datasets.datasets import ContrastiveDataset
 from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ logger = logging.getLogger(__name__)
 def pretrain_encoder(
     input_dim: int,
     hidden_dims: list,
-    contrastive_csv: str,
+    preprocess_encoder: Preprocessing,
     device: torch.device,
     batch_size: int = 256,
     epochs: int = 20,
@@ -45,7 +44,8 @@ def pretrain_encoder(
     Args:
         input_dim: Number of input features.
         hidden_dims: Encoder layer widths (same as for the autoencoder).
-        contrastive_csv: Path to the CSV with contrastive training data.
+        preprocess_encoder: Preprocessing object wrapping the encoder half
+            of the data, used to build the ContrastiveDataset.
         device: Torch device.
         batch_size: Mini-batch size for contrastive training.
         epochs: Number of contrastive training epochs.
@@ -54,7 +54,7 @@ def pretrain_encoder(
     Returns:
         The backbone encoder's state_dict.
     """
-    dataset = ContrastiveDataset(csv=contrastive_csv, drop_time=True)
+    dataset = preprocess_encoder.get_contrastive_dataset()
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
     model = ContrastiveModel(input_dim=input_dim, hidden_dims=hidden_dims).to(device)
@@ -88,7 +88,6 @@ def pretrain_encoder(
             epoch, epochs, avg_loss,
         )
 
-    # Return only the backbone encoder weights (discard the projection head)
     return model.backbone.state_dict()
 
 
@@ -96,9 +95,9 @@ def pretrain_encoder(
 
 def objective(
     trial: optuna.Trial,
+    preprocess_encoder: Preprocessing,
     preprocess_decoder: Preprocessing,
     base_config: dict,
-    contrastive_csv: str,
     contrastive_epochs: int = 20,
     num_epochs: int = 30,
 ) -> float:
@@ -113,10 +112,11 @@ def objective(
 
     Args:
         trial: The Optuna trial object for hyperparameter suggestion.
+        preprocess_encoder: Pre-initialised Preprocessing object for the
+            encoder half of the data (contrastive pre-training).
         preprocess_decoder: Pre-initialised Preprocessing object for the
-            decoder half of the data (loaded once in main).
+            decoder half of the data (reconstruction training).
         base_config: Base configuration dictionary to deep-copy and override.
-        contrastive_csv: Path to CSV for contrastive encoder pre-training.
         contrastive_epochs: Number of epochs for contrastive pre-training.
         num_epochs: Maximum number of reconstruction training epochs per trial.
 
@@ -188,7 +188,7 @@ def objective(
     encoder_state_dict = pretrain_encoder(
         input_dim=input_dim,
         hidden_dims=hidden_dims,
-        contrastive_csv=contrastive_csv,
+        preprocess_encoder=preprocess_encoder,
         device=device,
         batch_size=batch_size,
         epochs=contrastive_epochs,
@@ -264,18 +264,18 @@ def objective(
 
 def prepare_data_split(data_path: str = "data/creditcard.csv", random_state: int = 42):
     """Split the raw dataset 50/50 into encoder (contrastive) and decoder
-    (reconstruction) halves, mirroring Contrastive_training.py.
+    (reconstruction) halves to avoid data leakage between pre-training
+    and reconstruction training.
 
-    The encoder half is saved to 'data/contrastive.csv' for the
-    ContrastiveDataset loader. The decoder half is returned as a
-    Preprocessing object ready for get_dataset() calls.
+    Each half is wrapped in a Preprocessing object so that downstream
+    code can call get_contrastive_dataset() or get_dataset() directly.
 
     Args:
         data_path: Path to the raw credit card CSV.
         random_state: Random seed for reproducible splitting.
 
     Returns:
-        A tuple of (preprocess_decoder, contrastive_csv_path).
+        A tuple of (preprocess_encoder, preprocess_decoder).
     """
     originaldata = pd.read_csv(data_path)
 
@@ -293,21 +293,17 @@ def prepare_data_split(data_path: str = "data/creditcard.csv", random_state: int
         frauddata, test_size=0.5, random_state=random_state
     )
 
-    # Encoder half → saved as CSV for ContrastiveDataset
+    # Encoder half → contrastive pre-training
     encoder_df = pd.concat([encoder_normal_df, encoder_fraud_df])
-    contrastive_csv = "data/contrastive.csv"
-    encoder_df.to_csv(contrastive_csv, index=False)
-    logger.info(
-        "Encoder half: %d samples saved to %s", len(encoder_df), contrastive_csv
-    )
+    logger.info("Encoder half: %d samples for contrastive pre-training", len(encoder_df))
+    preprocess_encoder = Preprocessing(encoder_df, drop_time=True)
 
-    # Decoder half → wrapped in Preprocessing for get_dataset()
+    # Decoder half → reconstruction training
     decoder_df = pd.concat([decoder_normal_df, decoder_fraud_df])
     logger.info("Decoder half: %d samples for reconstruction", len(decoder_df))
-
     preprocess_decoder = Preprocessing(decoder_df, drop_time=True)
 
-    return preprocess_decoder, contrastive_csv
+    return preprocess_encoder, preprocess_decoder
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -375,11 +371,11 @@ def main():
     logger.info(f"Logging initialized. Output saved to: {log_file_path}")
 
     # ── Data Split (once) ────────────────────────────────────────────────
-    # Split the raw data 50/50 following Contrastive_training.py:
-    #   - Encoder half → contrastive pre-training (CSV for ContrastiveDataset)
-    #   - Decoder half → reconstruction training (Preprocessing object)
+    # Split the raw data 50/50:
+    #   - Encoder half → contrastive pre-training
+    #   - Decoder half → reconstruction training
     logger.info("Splitting raw dataset 50/50 (encoder / decoder)...")
-    preprocess_decoder, contrastive_csv = prepare_data_split(
+    preprocess_encoder, preprocess_decoder = prepare_data_split(
         data_path="data/creditcard.csv",
         random_state=base_config.get("seed", 42),
     )
@@ -401,9 +397,9 @@ def main():
     study.optimize(
         lambda trial: objective(
             trial,
+            preprocess_encoder,
             preprocess_decoder,
             base_config,
-            contrastive_csv=contrastive_csv,
             contrastive_epochs=args.contrastive_epochs,
             num_epochs=args.epochs_per_trial,
         ),

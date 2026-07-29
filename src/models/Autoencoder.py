@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Helper function used by both encoder and decoder
-# It creates a block of Linear -> BatchNorm -> ReLU
 def _make_block(in_features: int, out_features: int) -> nn.Sequential:
     """
     Standard feedforward block used by both encoder and decoder.

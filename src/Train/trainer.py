@@ -136,7 +136,7 @@ class Trainer:
         # Task
         self.task = config['model']['task']
 
-        # Loss — passa i class weights a CrossEntropyLoss se forniti
+        # Loss
         if class_weight is not None:
             class_weight = class_weight.to(self.device)
         self.criterion = _build_loss(training_cfg["loss"], weight=class_weight)
@@ -308,7 +308,7 @@ class Trainer:
                     val_metric if use_custom_metric else "val_loss", best_metric,
                 )
 
-            # ── Scheduler Step (sempre su val_loss) ──────────────────────────
+            # ── Scheduler Step ────────────────────────────────────────────────
             if self.scheduler is not None:
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau

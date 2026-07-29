@@ -46,7 +46,7 @@ classification:
 paths:
   data_dir: "data/"
   checkpoint_dir: "checkpoints/"
-  checkpoint_name: "Classifier_best.pt"   # nome del checkpoint salvato/caricato
+  checkpoint_name: "Classifier_best.pt"
   log_dir: "logs/"
 
 seed: 42
