@@ -11,13 +11,12 @@ Pipeline:
 import argparse
 
 import pandas as pd
-import torch
 from torch.utils.data import DataLoader
 
 from src.utils import load_config, setup_logging, set_seed, get_device
-from src.models.Autoencoder import ContrastiveModel
-from src.Datasets.preprocess import Preprocessing
-from src.Train.contrastive_trainer import ContrastiveTrainer
+from src.models.autoencoder import ContrastiveModel
+from src.datasets.preprocess import Preprocessing
+from src.train.contrastive_trainer import ContrastiveTrainer
 
 
 def train_contrastive_model(config_path: str = "configs/config.yaml") -> None:

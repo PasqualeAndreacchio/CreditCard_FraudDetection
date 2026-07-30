@@ -20,11 +20,11 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.utils import load_config, setup_logging, set_seed, get_device, count_parameters
-from src.Datasets.preprocess import Preprocessing
-from src.models.Autoencoder import FraudAutoencoder
-from src.Train.trainer import Trainer
-from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
-from src.Evaluation.plots import plot_training_history
+from src.datasets.preprocess import Preprocessing
+from src.models.autoencoder import FraudAutoencoder
+from src.train.trainer import Trainer
+from src.evaluation.reconstruction_evaluator import ReconstructionEvaluator
+from src.evaluation.plots import plot_training_history
 
 logger = logging.getLogger(__name__)
 

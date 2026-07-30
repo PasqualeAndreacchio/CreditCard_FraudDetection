@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models.Autoencoder import ContrastiveModel
+from src.models.autoencoder import ContrastiveModel
 
 logger = logging.getLogger(__name__)
 

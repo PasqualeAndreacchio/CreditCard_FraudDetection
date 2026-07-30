@@ -16,10 +16,10 @@ from sklearn.metrics import average_precision_score
 import optuna
 from optuna.samplers import TPESampler
 
-from src.models.Autoencoder import ContrastiveModel, FraudAutoencoder
-from src.Train.trainer import Trainer
-from src.Datasets.preprocess import Preprocessing
-from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
+from src.models.autoencoder import ContrastiveModel, FraudAutoencoder
+from src.train.trainer import Trainer
+from src.datasets.preprocess import Preprocessing
+from src.evaluation.reconstruction_evaluator import ReconstructionEvaluator
 
 logger = logging.getLogger(__name__)
 

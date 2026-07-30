@@ -21,12 +21,12 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from src.Evaluation.metrics import (
+from src.evaluation.metrics import (
     compute_all_metrics,
     log_metrics,
     find_f1_optimal_threshold,
 )
-from src.Evaluation.plots import (
+from src.evaluation.plots import (
     plot_confusion_matrix,
     plot_precision_recall_curve,
     plot_roc_curve,
@@ -34,7 +34,7 @@ from src.Evaluation.plots import (
     plot_score_distribution,
     plot_precision_recall_f1_vs_threshold,
 )
-from src.Evaluation.evaluation_utils import NumpyEncoder
+from src.evaluation.evaluation_utils import NumpyEncoder
 
 logger = logging.getLogger(__name__)
 

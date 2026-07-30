@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import RobustScaler
 import torch
-from src.Datasets.datasets import ContrastiveDataset
+from src.datasets.datasets import ContrastiveDataset
 
 
 class Preprocessing:

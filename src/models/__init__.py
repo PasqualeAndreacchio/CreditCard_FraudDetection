@@ -7,8 +7,8 @@ Available models:
     - ContrastiveModel: Encoder backbone + projection head for contrastive pre-training.
 """
 
-from src.models.Autoencoder import FraudAutoencoder, ContrastiveModel, Encoder, Decoder
-from src.models.Classifier import FraudDetectionMLP
+from src.models.autoencoder import FraudAutoencoder, ContrastiveModel, Encoder, Decoder
+from src.models.classifier import FraudDetectionMLP
 
 __all__ = [
     "FraudAutoencoder",

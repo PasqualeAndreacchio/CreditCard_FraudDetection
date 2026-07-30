@@ -20,11 +20,11 @@ import yaml
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.utils import load_config, setup_logging, set_seed, get_device, count_parameters
-from src.Datasets.preprocess import Preprocessing
-from src.models.Classifier import FraudDetectionMLP
-from src.Train.trainer import Trainer
-from src.Evaluation.classification_evaluator import ClassificationEvaluator
-from src.Evaluation.plots import plot_training_history
+from src.datasets.preprocess import Preprocessing
+from src.models.classifier import FraudDetectionMLP
+from src.train.trainer import Trainer
+from src.evaluation.classification_evaluator import ClassificationEvaluator
+from src.evaluation.plots import plot_training_history
 
 logger = logging.getLogger(__name__)
 

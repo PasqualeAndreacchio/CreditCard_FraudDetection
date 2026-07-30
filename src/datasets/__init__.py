@@ -6,7 +6,7 @@ Provides:
     - ContrastiveDataset: PyTorch Dataset yielding anchor/positive/negative triplets.
 """
 
-from src.Datasets.preprocess import Preprocessing
-from src.Datasets.datasets import ContrastiveDataset
+from src.datasets.preprocess import Preprocessing
+from src.datasets.datasets import ContrastiveDataset
 
 __all__ = ["Preprocessing", "ContrastiveDataset"]

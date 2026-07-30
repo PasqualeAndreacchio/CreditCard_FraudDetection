@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .Autoencoder import Encoder
+from .autoencoder import Encoder
 
 class FraudDetectionMLP(nn.Module):
     """Supervised MLP classifier for direct fraud detection.

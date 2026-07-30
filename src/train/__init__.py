@@ -6,7 +6,7 @@ Provides:
     - ContrastiveTrainer: Contrastive pre-training with TripletMarginLoss.
 """
 
-from src.Train.trainer import Trainer
-from src.Train.contrastive_trainer import ContrastiveTrainer
+from src.train.trainer import Trainer
+from src.train.contrastive_trainer import ContrastiveTrainer
 
 __all__ = ["Trainer", "ContrastiveTrainer"]
