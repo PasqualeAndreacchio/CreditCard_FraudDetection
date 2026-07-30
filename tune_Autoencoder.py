@@ -11,6 +11,7 @@ import torch.optim as optim
 import yaml
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
+from sklearn.metrics import average_precision_score
 
 import optuna
 from optuna.samplers import TPESampler
@@ -23,7 +24,7 @@ from src.Evaluation.reconstruction_evaluator import ReconstructionEvaluator
 logger = logging.getLogger(__name__)
 
 
-# ── Contrastive Pre-training ────────────────────────────────────────────────
+# Contrastive Pre-training
 
 def pretrain_encoder(
     input_dim: int,
@@ -91,7 +92,7 @@ def pretrain_encoder(
     return model.backbone.state_dict()
 
 
-# ── Objective Function ──────────────────────────────────────────────────────
+# Objective Function
 
 def objective(
     trial: optuna.Trial,
@@ -124,7 +125,7 @@ def objective(
         Validation AUPRC score (higher is better).
     """
 
-    # ── 1. Suggest Hyperparameters — Architecture ────────────────────────
+    # Suggest Hyperparameters for the architecture
     num_layers = trial.suggest_int("num_layers", 2, 4)
     hidden_dim_1 = trial.suggest_categorical("hidden_dim_1", [20, 24, 28])
     hidden_dim_2 = trial.suggest_categorical("hidden_dim_2", [12, 14, 16, 18])
@@ -149,14 +150,14 @@ def objective(
             )
         hidden_dims.append(hidden_dim_4)
 
-    # ── 1b. Suggest Hyperparameters — Training ───────────────────────────
+    # Suggest Hyperparameters for the training
     loss_type = trial.suggest_categorical("loss", ["mse", "mae", "huber"])
     learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
     optimizer_name = trial.suggest_categorical("optimizer", ["adam", "adamw"])
 
-    # ── 2. Build Trial Configuration ─────────────────────────────────────
+    # Build Trial Configuration
     config = copy.deepcopy(base_config)
     config["model"]["hidden_dims"] = hidden_dims
 
@@ -180,7 +181,7 @@ def objective(
     device = torch.device(config.get("device", "cpu"))
     input_dim = config["model"]["input_dim"]
 
-    # ── 3. Contrastive Pre-training (Encoder) ────────────────────────────
+    # Contrastive Pre-training (Encoder)
     logger.info(
         "  Trial %d — Contrastive pre-training (hidden_dims=%s)...",
         trial.number, hidden_dims,
@@ -195,7 +196,7 @@ def objective(
         learning_rate=1e-3,
     )
 
-    # ── 4. Data Preparation (Decoder half) ───────────────────────────────
+    # Data Preparation (Decoder half)
     # The decoder Preprocessing object uses only the reconstruction half
     # of the data (decoder_df), following the same split as
     # Contrastive_training.py.
@@ -228,7 +229,7 @@ def objective(
         pin_memory=torch.cuda.is_available(),
     )
 
-    # ── 5. Model Instantiation (with pre-trained encoder) ────────────────
+    # Model Instantiation with pre-trained encoder
     model = FraudAutoencoder(config=config)
 
     # Load the contrastive pre-trained weights into the encoder.
@@ -236,7 +237,7 @@ def objective(
     model.encoder.load_state_dict(encoder_state_dict)
     logger.info("  Loaded contrastive pre-trained encoder weights.")
 
-    # ── 6. Training with AUPRC Checkpointing ─────────────────────────────
+    # Training with AUPRC Checkpointing
     labels_val = (y_val_tensor.cpu().numpy() > 0).astype(int)
     trainer = Trainer(model=model, config=config)
     trainer.fit(
@@ -245,7 +246,7 @@ def objective(
         val_labels=labels_val,
     )
 
-    # ── 7. Validation Evaluation on Best Checkpoint ──────────────────────
+    # Validation Evaluation on Best Checkpoint
     checkpoint_name = config["paths"].get("checkpoint_name", "autoencoder_tune_best.pt")
     best_ckpt_path = os.path.join(trainer.checkpoint_dir, checkpoint_name)
     if os.path.exists(best_ckpt_path):
@@ -254,14 +255,12 @@ def objective(
     evaluator = ReconstructionEvaluator(model=model, config=config, device=device)
     scores_val = evaluator.compute_anomaly_scores(val_loader)
 
-    from sklearn.metrics import average_precision_score
     val_auprc = float(average_precision_score(labels_val, scores_val, pos_label=1))
 
     return val_auprc
 
 
-# ── Data Splitting ──────────────────────────────────────────────────────────
-
+# Data Splitting
 def prepare_data_split(data_path: str = "data/creditcard.csv", random_state: int = 42):
     """Split the raw dataset 50/50 into encoder (contrastive) and decoder
     (reconstruction) halves to avoid data leakage between pre-training
@@ -293,20 +292,18 @@ def prepare_data_split(data_path: str = "data/creditcard.csv", random_state: int
         frauddata, test_size=0.5, random_state=random_state
     )
 
-    # Encoder half → contrastive pre-training
+    # Encoder half -> contrastive pre-training
     encoder_df = pd.concat([encoder_normal_df, encoder_fraud_df])
     logger.info("Encoder half: %d samples for contrastive pre-training", len(encoder_df))
     preprocess_encoder = Preprocessing(encoder_df, drop_time=True)
 
-    # Decoder half → reconstruction training
+    # Decoder half -> reconstruction training
     decoder_df = pd.concat([decoder_normal_df, decoder_fraud_df])
     logger.info("Decoder half: %d samples for reconstruction", len(decoder_df))
     preprocess_decoder = Preprocessing(decoder_df, drop_time=True)
 
     return preprocess_encoder, preprocess_decoder
 
-
-# ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
@@ -345,11 +342,11 @@ def main():
     )
     args = parser.parse_args()
 
-    # ── Load Base Configuration ──────────────────────────────────────────
+    # Load Base Configuration
     with open(args.config, "r") as f:
         base_config = yaml.safe_load(f)
 
-    # ── Logging Setup ────────────────────────────────────────────────────
+    # Logging Setup
     log_dir = base_config.get("paths", {}).get("log_dir", "logs/")
     os.makedirs(log_dir, exist_ok=True)
     log_file_path = os.path.join(log_dir, "tune_autoencoder.log")
@@ -370,17 +367,17 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Logging initialized. Output saved to: {log_file_path}")
 
-    # ── Data Split (once) ────────────────────────────────────────────────
+    # Data Split (once)
     # Split the raw data 50/50:
-    #   - Encoder half → contrastive pre-training
-    #   - Decoder half → reconstruction training
+    #   - Encoder half -> contrastive pre-training
+    #   - Decoder half -> reconstruction training
     logger.info("Splitting raw dataset 50/50 (encoder / decoder)...")
     preprocess_encoder, preprocess_decoder = prepare_data_split(
         data_path="data/creditcard.csv",
         random_state=base_config.get("seed", 42),
     )
 
-    # ── Create Optuna Study ──────────────────────────────────────────────
+    # Create Optuna Study
     optuna.logging.set_verbosity(optuna.logging.INFO)
     sampler = TPESampler(seed=base_config.get("seed", 42))
     study = optuna.create_study(
@@ -406,7 +403,7 @@ def main():
         n_trials=args.n_trials,
     )
 
-    # ── Report Results ───────────────────────────────────────────────────
+    # Report Results
     logger.info("=" * 60)
     logger.info("  TUNING COMPLETED")
     logger.info("=" * 60)
@@ -415,7 +412,7 @@ def main():
     for k, v in study.best_params.items():
         logger.info(f"  - {k}: {v}")
 
-    # ── Build and Save Best Configuration ────────────────────────────────
+    # Build and Save Best Configuration
     best_config = copy.deepcopy(base_config)
     bp = study.best_params
 

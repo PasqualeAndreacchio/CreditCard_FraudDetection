@@ -21,7 +21,7 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-# ─── Configuration ──────────────────────────────────────────────────────────
+# Config loading and validation
 
 def load_config(path: str) -> dict[str, Any]:
     """Load and validate a YAML configuration file.
@@ -55,13 +55,13 @@ def _validate_config(config: dict) -> None:
     Raises:
         ValueError: On missing or malformed configuration entries.
     """
-    # ── Required top-level sections ──────────────────────────────────
+    # Required top-level sections
     required_sections = ["model", "training", "paths"]
     for section in required_sections:
         if section not in config:
             raise ValueError(f"Missing required config section: '{section}'")
 
-    # ── Model section ────────────────────────────────────────────────
+    # Model section
     model_cfg = config["model"]
     task = model_cfg.get("task")
 
@@ -88,7 +88,7 @@ def _validate_config(config: dict) -> None:
     else:
         raise ValueError(f"Unknown task '{task}'. Must be 'reconstruction' or 'classification'.")
 
-    # ── Training section ─────────────────────────────────────────────
+    # Training section
     training_cfg = config["training"]
     for key in ["epochs", "learning_rate", "loss"]:
         if key not in training_cfg:
@@ -98,7 +98,7 @@ def _validate_config(config: dict) -> None:
     if training_cfg["loss"] not in valid_losses:
         raise ValueError(f"Invalid loss '{training_cfg['loss']}'. Must be one of {valid_losses}.")
 
-    # ── Anomaly section (optional, only for reconstruction) ──────────
+    # Anomaly section (optional, only for reconstruction)
     anomaly_cfg = config.get("anomaly", {})
     valid_methods = {"percentile", "mean_std", "f1_optimal"}
     if anomaly_cfg.get("threshold_method", "percentile") not in valid_methods:
@@ -110,7 +110,7 @@ def _validate_config(config: dict) -> None:
     logger.debug("Configuration validated successfully.")
 
 
-# ─── Reproducibility ────────────────────────────────────────────────────────
+# Reproducibility seeding
 
 def set_seed(seed: int) -> None:
     """Set random seed for reproducibility across all libraries.
@@ -127,7 +127,7 @@ def set_seed(seed: int) -> None:
     logger.info("Random seed set to %d.", seed)
 
 
-# ─── Device ─────────────────────────────────────────────────────────────────
+# Device resolution
 
 def get_device(config: dict) -> torch.device:
     """Resolve the compute device from configuration.
@@ -147,7 +147,7 @@ def get_device(config: dict) -> torch.device:
     return device
 
 
-# ─── Logging ────────────────────────────────────────────────────────────────
+# Logging setup
 
 def setup_logging(log_dir: str | None = None, level: int = logging.INFO) -> None:
     """Configure root logger with console and optional file handler.
@@ -172,7 +172,7 @@ def setup_logging(log_dir: str | None = None, level: int = logging.INFO) -> None
     logger.debug("Logging initialised (level=%s, log_dir=%s).", level, log_dir)
 
 
-# ─── Model Helpers ──────────────────────────────────────────────────────────
+# Model parameter utilities
 
 def count_parameters(model: torch.nn.Module) -> int:
     """Count the number of trainable parameters in a model.

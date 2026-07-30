@@ -15,14 +15,8 @@ class ContrastiveDataset(Dataset):
     """
     def __init__(self, *args, **kwargs) -> None:
         raise RuntimeError(
-            "ContrastiveDataset cannot be instantiated directly.\n"
-            "Use Preprocessing.get_contrastive_dataset() instead, which ensures a\n"
-            "proper train/val/test split and RobustScaler fitting before building\n"
-            "the contrastive dataset:\n\n"
-            "    preprocessor = Preprocessing(df, drop_time=True)\n"
-            "    dataset = preprocessor.get_contrastive_dataset(\n"
-            "        test_size=0.2, val_size=0.15, random_state=42\n"
-            "    )"
+            "Don't instantiate ContrastiveDataset directly. \n "
+            "Use Preprocessing.get_contrastive_dataset() instead to ensure a proper train/val/test split and proper scaling."
         )
 
     def __len__(self) -> int:

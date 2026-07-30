@@ -70,7 +70,7 @@ class ClassificationEvaluator:
         self.model = model.to(self.device)
         self.classification_cfg = config.get("classification", {})
 
-    # ── Probability Computation ─────────────────────────────────────────
+    # Fraud probability computation
 
     @torch.no_grad()
     def compute_probabilities(self, dataloader: DataLoader) -> np.ndarray:
@@ -110,7 +110,7 @@ class ClassificationEvaluator:
 
         return torch.cat(all_probs).numpy()
 
-    # ── Prediction ──────────────────────────────────────────────────────
+    # Binary prediction from probabilities and threshold
 
     def predict(self, dataloader: DataLoader, threshold: float = 0.5) -> np.ndarray:
         """Predict the label of each sample.
@@ -125,7 +125,7 @@ class ClassificationEvaluator:
         probabilities = self.compute_probabilities(dataloader)
         return (probabilities > threshold).astype(np.int32)
 
-    # ── Full Evaluation ─────────────────────────────────────────────────
+    # Full evaluation pipeline
 
     def evaluate(
         self,
@@ -154,15 +154,15 @@ class ClassificationEvaluator:
 
         predictions = (probs > threshold).astype(np.int32)
 
-        # ── Compute all metrics ─────────────────────────────────────
+        # Compute all metrics
         metrics = compute_all_metrics(labels, predictions, probs, threshold)
         log_metrics(metrics)
 
-        # ── Generate plots ──────────────────────────────────────────
+        # Generate diagnostic plots
         plot_dir = self.classification_cfg.get("plots_dir", "plots/classification")
         self._generate_plots(probs, labels, threshold, save_dir=plot_dir)
 
-        # ── Save metrics to JSON ────────────────────────────────────
+        # Save metrics to JSON
         results_dir = self.classification_cfg.get("results_dir", "results/classification")
         os.makedirs(results_dir, exist_ok=True)
         metrics_path = os.path.join(results_dir, "metrics.json")
@@ -172,7 +172,7 @@ class ClassificationEvaluator:
 
         return metrics
 
-    # ── Plotting ────────────────────────────────────────────────────────
+    # Plot generation helpers
 
     def _generate_plots(
         self,
@@ -245,7 +245,7 @@ class ClassificationEvaluator:
             title="Classifier — Confusion Matrix",
         )
 
-    # ── Private Helpers ─────────────────────────────────────────────────
+    # Private helper methods
 
     def _find_optimal_threshold(
         self,

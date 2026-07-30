@@ -29,7 +29,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
-# ─── Loss Registry ──────────────────────────────────────────────────────────
+# Supported loss functions (add more if needed)
 
 _LOSSES: dict[str, type[nn.Module]] = {
     "mse": nn.MSELoss,
@@ -56,7 +56,7 @@ def _build_loss(name: str, weight: torch.Tensor | None = None) -> nn.Module:
     return _LOSSES[key]()
 
 
-# ─── Early Stopping ─────────────────────────────────────────────────────────
+# Early stopping logic, keeps track of best val loss and halts if stuck
 
 class EarlyStopping:
     """Monitors validation loss and triggers early stopping.
@@ -101,7 +101,7 @@ class EarlyStopping:
         return self.should_stop
 
 
-# ─── Trainer ────────────────────────────────────────────────────────────────
+# Main trainer class: handles the full training lifecycle
 
 class Trainer:
     """Orchestrates the training lifecycle of an :class:`FFNNAutoencoder`.
@@ -169,7 +169,7 @@ class Trainer:
             "lr": [],
         }
 
-    # ── Builder Helpers ─────────────────────────────────────────────────
+    # Helper methods to build optimizer and scheduler from config
 
     def _build_optimizer(self, training_cfg: dict) -> torch.optim.Optimizer:
         """Create an optimizer from configuration."""
@@ -221,7 +221,7 @@ class Trainer:
                 "Use 'reduce_on_plateau', 'cosine', 'step', or 'none'."
             )
 
-    # ── Training Loop ───────────────────────────────────────────────────
+    # Training loop and related utilities
 
     def fit(
         self,
@@ -257,15 +257,15 @@ class Trainer:
         t_start = time.time()
 
         for epoch in range(1, epochs + 1):
-            # ── Train ───────────────────────────────────────────────────────
+            # Train for one epoch
             train_loss = self._train_epoch(train_loader, epoch, epochs)
 
-            # ── Validate ────────────────────────────────────────────────────
+            # Validate and compute optional metrics
             val_loss = self._validate_epoch(val_loader)
             val_f1 = self._compute_val_f1(val_loader, val_labels) if use_f1 else 0.0
             val_auprc = self._compute_val_auprc(val_loader, val_labels) if use_auprc else 0.0
 
-            # ── Record ──────────────────────────────────────────────────────
+            # Save stats for this epoch
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.history["train_loss"].append(train_loss)
             self.history["val_loss"].append(val_loss)
@@ -292,7 +292,7 @@ class Trainer:
                     epoch, epochs, train_loss, val_loss, current_lr,
                 )
 
-            # ── Checkpointing ───────────────────────────────────────────────
+            # Save model if this is the best result so far
             is_better = (metric_value > best_metric) if use_custom_metric else (metric_value < best_metric)
 
             if is_better:
@@ -308,7 +308,7 @@ class Trainer:
                     val_metric if use_custom_metric else "val_loss", best_metric,
                 )
 
-            # ── Scheduler Step ────────────────────────────────────────────────
+            # Update learning rate if a scheduler is configured
             if self.scheduler is not None:
                 if isinstance(
                     self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau
@@ -317,7 +317,7 @@ class Trainer:
                 else:
                     self.scheduler.step()
 
-            # ── Early Stopping ──────────────────────────────────────
+            # Check early stopping condition
             if self.early_stopping is not None:
                 es_value = -metric_value if use_custom_metric else val_loss
                 if self.early_stopping.step(es_value):
@@ -524,7 +524,7 @@ class Trainer:
 
         return float(average_precision_score(labels, scores, pos_label=1))
 
-    # ── Checkpointing ──────────────────────────────────────────────────────
+    # Checkpoint save/load utilities
 
     def save_checkpoint(
         self, path: str, epoch: int = 0, val_loss: float = 0.0

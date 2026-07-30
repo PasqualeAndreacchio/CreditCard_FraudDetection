@@ -31,7 +31,7 @@ from sklearn.metrics import (
 logger = logging.getLogger(__name__)
 
 
-# ─── Core Metrics ───────────────────────────────────────────────────────────
+# Main metrics computation function
 
 def compute_all_metrics(
     y_true: np.ndarray,
@@ -59,19 +59,19 @@ def compute_all_metrics(
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     tn, fp, fn, tp = cm.ravel()
 
-    # ── Standard metrics ────────────────────────────────────────────
+    # Standard metrics
     precision = float(precision_score(y_true, y_pred, zero_division=0))
     recall = float(recall_score(y_true, y_pred, zero_division=0))
     f1 = float(f1_score(y_true, y_pred, zero_division=0))
 
-    # ── Extended metrics ────────────────────────────────────────────
+    # Extended metrics
     f2 = float(fbeta_score(y_true, y_pred, beta=2, zero_division=0))
     specificity = float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
     mcc = float(matthews_corrcoef(y_true, y_pred))
     kappa = float(cohen_kappa_score(y_true, y_pred))
     balanced_acc = float(balanced_accuracy_score(y_true, y_pred))
 
-    # ── Ranking metrics (threshold-independent) ─────────────────────
+    # Ranking metrics (threshold-independent)
     try:
         auprc = float(average_precision_score(y_true, y_scores))
     except ValueError:
@@ -81,7 +81,7 @@ def compute_all_metrics(
     except ValueError:
         auroc = 0.0
 
-    # ── Report ──────────────────────────────────────────────────────
+    # Full classification report
     report = classification_report(
         y_true, y_pred, labels=[0, 1],
         target_names=["Normal", "Fraud"], zero_division=0,
@@ -143,7 +143,7 @@ def log_metrics(metrics: dict[str, Any]) -> None:
     logger.info("=" * 55)
 
 
-# ─── Threshold Utilities ────────────────────────────────────────────────────
+# Threshold search utility
 
 def find_f1_optimal_threshold(scores: np.ndarray, labels: np.ndarray) -> float:
     """Search for the threshold that maximises F1-score.

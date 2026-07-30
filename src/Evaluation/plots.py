@@ -30,7 +30,7 @@ from sklearn.metrics import (
 logger = logging.getLogger(__name__)
 
 
-# ─── Confusion Matrix ──────────────────────────────────────────────────────
+# Confusion matrix heatmap
 
 def plot_confusion_matrix(
     cm: np.ndarray,
@@ -78,7 +78,7 @@ def plot_confusion_matrix(
     logger.info("Saved: %s", path)
 
 
-# ─── Precision-Recall Curve ─────────────────────────────────────────────────
+# Precision-Recall curve
 
 def plot_precision_recall_curve(
     labels: np.ndarray,
@@ -125,7 +125,7 @@ def plot_precision_recall_curve(
     logger.info("Saved: %s", path)
 
 
-# ─── ROC Curve ──────────────────────────────────────────────────────────────
+# ROC curve
 
 def plot_roc_curve(
     labels: np.ndarray,
@@ -170,7 +170,7 @@ def plot_roc_curve(
     logger.info("Saved: %s", path)
 
 
-# ─── F1 vs Threshold ───────────────────────────────────────────────────────
+# F1 score vs decision threshold
 
 def plot_f1_vs_threshold(
     labels: np.ndarray,
@@ -221,7 +221,7 @@ def plot_f1_vs_threshold(
     logger.info("Saved: %s", path)
 
 
-# ─── Score Distribution ────────────────────────────────────────────────────
+# Score distribution histogram (normal vs fraud)
 
 def plot_score_distribution(
     scores: np.ndarray,
@@ -289,7 +289,7 @@ def plot_score_distribution(
     logger.info("Saved: %s", path)
 
 
-# ─── Training History ──────────────────────────────────────────────────────
+# Training history plots (loss, metrics, learning rate)
 
 def plot_training_history(
     history: dict[str, list[float]],
@@ -325,7 +325,7 @@ def plot_training_history(
 
     epochs = range(1, len(train_loss) + 1)
 
-    # ── Loss ────────────────────────────────────────────────────────
+    # Loss subplot
     ax = axes[0]
     ax.plot(epochs, train_loss, label="Train Loss", color="#3498db", linewidth=2)
     if val_loss:
@@ -337,7 +337,7 @@ def plot_training_history(
 
     idx = 1
 
-    # ── Val Metric (F1 or AUPRC) ────────────────────────────────────
+    # Validation metric subplot (F1 or AUPRC)
     if has_val_metric:
         ax = axes[idx]
         if any(v > 0 for v in val_f1):
@@ -350,7 +350,7 @@ def plot_training_history(
         ax.grid(True, alpha=0.3)
         idx += 1
 
-    # ── Learning Rate ───────────────────────────────────────────────
+    # Learning rate subplot
     if has_lr:
         ax = axes[idx]
         ax.plot(epochs, lr_history, label="Learning Rate", color="#f39c12", linewidth=2)
@@ -371,7 +371,7 @@ def plot_training_history(
     logger.info("Saved: %s", path)
 
 
-# ─── Precision / Recall / F1 vs Threshold ──────────────────────────────────
+# Combined precision, recall and F1 vs threshold
 
 def plot_precision_recall_f1_vs_threshold(
     labels: np.ndarray,

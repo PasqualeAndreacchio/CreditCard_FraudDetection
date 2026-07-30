@@ -68,8 +68,7 @@ class ReconstructionEvaluator:
         self.device = device
         self.anomaly_cfg = config.get("anomaly", {})
 
-    # ── Anomaly Scores ──────────────────────────────────────────────────
-
+    # Per-sample anomaly score computation
     @torch.no_grad()
     def compute_anomaly_scores(self, loader: DataLoader) -> np.ndarray:
         """Compute per-sample reconstruction error (MSE) for all data."""
@@ -89,8 +88,7 @@ class ReconstructionEvaluator:
 
         return np.array(all_errors)
 
-    # ── Threshold Determination ─────────────────────────────────────────
-
+    # Threshold determination methods
     def find_optimal_threshold(
         self,
         scores: np.ndarray,
@@ -131,8 +129,7 @@ class ReconstructionEvaluator:
 
         return threshold
 
-    # ── Prediction ──────────────────────────────────────────────────────
-
+    # Binary prediction from scores and threshold
     def predict(
         self,
         loader: DataLoader,
@@ -156,8 +153,7 @@ class ReconstructionEvaluator:
         )
         return predictions
 
-    # ── Full Evaluation ─────────────────────────────────────────────────
-
+    # Full evaluation pipeline
     def evaluate(
         self,
         loader: DataLoader,
@@ -185,15 +181,15 @@ class ReconstructionEvaluator:
 
         predictions = (scores > threshold).astype(np.int32)
 
-        # ── Compute all metrics ─────────────────────────────────────
+        # Compute all metrics
         metrics = compute_all_metrics(labels, predictions, scores, threshold)
         log_metrics(metrics)
 
-        # ── Generate plots ──────────────────────────────────────────
+        # Generate diagnostic plots
         plot_dir = self.anomaly_cfg.get("plots_dir", "plots/reconstruction")
         self._generate_plots(scores, labels, threshold, save_dir=plot_dir)
 
-        # ── Save metrics to JSON ────────────────────────────────────
+        # Save metrics to JSON
         results_dir = self.anomaly_cfg.get("results_dir", "results/reconstruction")
         os.makedirs(results_dir, exist_ok=True)
         metrics_path = os.path.join(results_dir, "metrics.json")
@@ -203,8 +199,7 @@ class ReconstructionEvaluator:
 
         return metrics
 
-    # ── Plotting ────────────────────────────────────────────────────────
-
+    # Plot generation helpers
     def _generate_plots(
         self,
         scores: np.ndarray,
